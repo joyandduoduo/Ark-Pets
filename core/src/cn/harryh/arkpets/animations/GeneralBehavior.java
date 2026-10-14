@@ -112,12 +112,16 @@ public class GeneralBehavior extends Behavior {
         AnimData a1 = stageAnimList.getStreamedAnimData(AnimType.ATTACK);
         AnimData a2 = stageAnimList.getStreamedAnimData(AnimType.INTERACT);
         AnimData a3 = a2 == null ? a1 : a2;
-        if (a3 == null) return defaultAnim();
+        if (a3 == null) {
+            AnimData skill = CompanionAnimations.skill(stageAnimList, 1, defaultAnim());
+            return skill == null ? defaultAnim() : skill;
+        }
         return new AnimData(a3.animClip(), a3.animNext(), false, true, a3.mobility()).join(defaultAnim());
     }
 
     @Override
     public AnimData dropped() {
+        if (System.getProperty("arkpets.companion.character") != null) return defaultAnim();
         return clickEnd();
     }
 }

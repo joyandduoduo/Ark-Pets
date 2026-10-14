@@ -21,6 +21,15 @@ processResources {
 def sentryDsn = (project.findProperty("SENTRY_DSN") ?: "").trim()
 
 // Runs the app without debug.
+tasks.register("companionRun", JavaExec) {
+    dependsOn = ["classes"]
+    group = "execute"
+    mainClass = "cn.harryh.arkpets.CompanionEntry"
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = project.rootDir
+    jvmArgs += "-Dfile.encoding=UTF-8"
+}
+
 tasks.register("run", JavaExec) {
     dependsOn = ["classes"]
     group = "execute"

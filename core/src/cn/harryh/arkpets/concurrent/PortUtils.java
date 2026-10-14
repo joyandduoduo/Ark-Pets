@@ -35,7 +35,7 @@ public class PortUtils {
                 SocketData socketData = JSONObject.parseObject(in.readLine(), SocketData.class);
                 out.close();
                 in.close();
-                if (socketData.operation == SocketData.Operation.HANDSHAKE_RESPONSE)
+                if (socketData != null && socketData.operation == SocketData.Operation.HANDSHAKE_RESPONSE)
                     return serverPort;
             } catch (ConnectException ignored) {
             } catch (JSONException ignored) {

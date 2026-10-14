@@ -1,6 +1,9 @@
 <!-- 欢迎阅读 Ark-Pets 说明文档 -->
 <!-- 仓库：https://github.com/isHarryh/Ark-Pets -->
 
+> 本 Fork 新增「角色陪伴」入口：精选角色、角色内换装、基建与战斗姿态、中文陪伴语音。
+> 使用与构建见 [角色陪伴定制版说明](docs/Companion.md)。游戏素材单独获取，不随源码上传。
+
 <!--suppress HtmlDeprecatedAttribute -->
 <div align="center" style="text-align:center">
    <h1> Ark-Pets </h1>

@@ -147,6 +147,11 @@ public class DynamicOrthographicCamara extends OrthographicCamera {
         return fbo;
     }
 
+    /** Releases the cached frame buffer. */
+    public void dispose() {
+        if (fbo != null) { fbo.dispose(); fbo = null; }
+    }
+
     /** Gets the current insert.
      * @return The insert object;
      */

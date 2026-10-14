@@ -61,4 +61,10 @@ public class SpineRenderPass {
         renderer.draw(batch, skeleton);
         batch.end();
     }
+
+    /** Releases the drawing resources. */
+    public void dispose() {
+        batch.dispose();
+        shader.dispose();
+    }
 }

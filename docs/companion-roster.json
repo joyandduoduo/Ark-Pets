@@ -1,0 +1,18 @@
+{
+  "voiceLanguage": "CN_MANDARIN",
+  "voiceMinSeconds": 600,
+  "voiceMaxSeconds": 1200,
+  "characters": [
+    {"id": "char_2024_chyue", "name": "重岳"},
+    {"id": "char_2027_wang", "name": "望"},
+    {"id": "char_2025_shu", "name": "黍"},
+    {"id": "char_2023_ling", "name": "令"},
+    {"id": "char_1014_nearl2", "name": "耀骑士临光"},
+    {"id": "char_4145_ulpia", "name": "乌尔比安"},
+    {"id": "char_1038_whitw2", "name": "荒芜拉普兰德"},
+    {"id": "char_1028_texas2", "name": "缄默德克萨斯"},
+    {"id": "char_322_lmlee", "name": "老鲤"},
+    {"id": "char_4232_hbound", "name": "旅骨"},
+    {"id": "char_615_acspec", "name": "Misery"}
+  ]
+}

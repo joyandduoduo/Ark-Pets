@@ -24,6 +24,7 @@ import static cn.harryh.arkpets.Const.PathConfig.tempDirPath;
 
 
 public class SkeletonLoader {
+    private TextureAtlas ownedAtlas;
     protected final FileHandle file;
     protected final boolean isJson;
     protected final long headerSize;
@@ -217,7 +218,18 @@ public class SkeletonLoader {
                 page.useMipMaps = true;
             }
         }
-        return loadSkeletonDataWith(new TextureAtlas(atlasData), scale);
+        ownedAtlas = new TextureAtlas(atlasData);
+        try {
+            return loadSkeletonDataWith(ownedAtlas, scale);
+        } catch (RuntimeException failure) {
+            dispose();
+            throw failure;
+        }
+    }
+
+    /** Releases the textures created by this loader. */
+    public void dispose() {
+        if (ownedAtlas != null) { ownedAtlas.dispose(); ownedAtlas = null; }
     }
 
     protected static String fixString(String s) {

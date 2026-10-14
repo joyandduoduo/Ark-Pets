@@ -43,6 +43,7 @@ public class ArkChar {
     private final PostProcessRenderPass postProcessRenderPass;
     private final TransitionFloat offsetY;
     private final Skeleton skeleton;
+    private SkeletonLoader skeletonLoader;
 
     private final AnimComposer composer;
     private final AnimationState animationState;
@@ -77,7 +78,7 @@ public class ArkChar {
             FileHandle skelFile = Gdx.files.internal(path2skel);
             // Load skel
             try {
-                SkeletonLoader skeletonLoader = new SkeletonLoader(skelFile);
+                skeletonLoader = new SkeletonLoader(skelFile);
                 Logger.info("Character", "Skeleton loading as " + (skeletonLoader.isJson() ? "JSON" : "binary"));
                 if (skeletonLoader.needFix()) {
                     Logger.warn("Character", "Skeleton parsing compatibility issue detected, fixing");
@@ -148,6 +149,14 @@ public class ArkChar {
      */
     public boolean setAnimation(AnimData animData) {
         return composer.offer(animData);
+    }
+
+    /** Releases the resources of an old wardrobe on the render thread. */
+    public void dispose() {
+        spineRenderPass.dispose();
+        postProcessRenderPass.dispose();
+        camera.dispose();
+        if (skeletonLoader != null) skeletonLoader.dispose();
     }
 
     /** Requests to set the outline's alpha value of the character.

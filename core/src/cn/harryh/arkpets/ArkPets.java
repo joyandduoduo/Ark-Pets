@@ -6,6 +6,9 @@ package cn.harryh.arkpets;
 import cn.harryh.arkpets.animations.AnimClip;
 import cn.harryh.arkpets.animations.AnimData;
 import cn.harryh.arkpets.animations.GeneralBehavior;
+import cn.harryh.arkpets.animations.CompanionAnimations;
+import cn.harryh.arkpets.companion.CompanionRuntime;
+import com.alibaba.fastjson2.JSONObject;
 import cn.harryh.arkpets.concurrent.SocketClient;
 import cn.harryh.arkpets.platform.HWndCtrl;
 import cn.harryh.arkpets.platform.WindowSystem;
@@ -40,6 +43,7 @@ public class ArkPets extends InputApplicationAdaptor {
     public MemberTrayImpl tray;
     public GeneralBehavior behavior;
     public TransitionVector2 windowPosition; // Window Position Easing
+    private CompanionRuntime companion;
 
     private HWndCtrl hWndMine;
     private List<? extends HWndCtrl> hWndList;
@@ -120,6 +124,7 @@ public class ArkPets extends InputApplicationAdaptor {
 
         // 6.Tray icon setup
         tray = new MemberTrayImpl(this, new SocketClient());
+        companion = CompanionRuntime.attach(this);
 
         // Setup complete
         writeSystemInfo();
@@ -129,6 +134,7 @@ public class ArkPets extends InputApplicationAdaptor {
 
     @Override
     public void render() {
+        if (companion != null) companion.update();
         if (performanceSampler != null)
             performanceSampler.beginFrame();
 
@@ -211,6 +217,52 @@ public class ArkPets extends InputApplicationAdaptor {
     @Override
     public void dispose() {
         Logger.info("App", "Dispose");
+        if (companion != null) companion.dispose();
+        if (cha != null) cha.dispose();
+    }
+
+    /** Changes wardrobe on the render thread while preserving the physical anchor. */
+    public void changeCompanionModel(String asset, JSONObject files) {
+        ArkConfig nextConfig = JSONObject.parseObject(JSONObject.toJSONString(config), ArkConfig.class);
+        nextConfig.character_asset = asset;
+        nextConfig.character_files = files;
+        ArkChar replacement = new ArkChar(nextConfig, nextConfig.display_scale);
+        GeneralBehavior nextBehavior;
+        try {
+            nextBehavior = new GeneralBehavior(nextConfig, replacement.animList);
+            replacement.adjustCanvas(nextBehavior.getCurrentStage());
+            replacement.setAnimation(nextBehavior.defaultAnim());
+            replacement.setAlpha(nextConfig.opacity_normal);
+        } catch (RuntimeException failure) {
+            replacement.dispose();
+            throw failure;
+        }
+        float center = plane.getX() + cha.camera.getWidth() / 2f;
+        float floor = plane.getY();
+        ArkChar previous = cha;
+        cha = replacement;
+        behavior = nextBehavior;
+        config = nextConfig;
+        tray.keepAnim = null;
+        plane.setObjSize(cha.camera.getWidth(), cha.camera.getHeight());
+        plane.changePosition(0, center - cha.camera.getWidth() / 2f, floor);
+        previous.dispose();
+        Logger.info("Companion", "Changed wardrobe to " + asset);
+    }
+
+    /** Plays one skill gesture without including a defeat animation. */
+    public boolean playCompanionSkill(int number) {
+        AnimData gesture = CompanionAnimations.skill(cha.animList, number, behavior.defaultAnim());
+        if (gesture != null) changeAnimation(gesture);
+        return gesture != null;
+    }
+
+    /** Lists the actual attack and skill gestures of the currently loaded model. */
+    public java.util.List<Integer> companionGestures() {
+        java.util.List<Integer> gestures = new java.util.ArrayList<>();
+        for (int i = 0; i <= 3; i++)
+            if (CompanionAnimations.skill(cha.animList, i, behavior.defaultAnim()) != null) gestures.add(i);
+        return gestures;
     }
 
     /* INTERFACES */
