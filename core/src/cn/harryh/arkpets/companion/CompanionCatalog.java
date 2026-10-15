@@ -20,6 +20,14 @@ public final class CompanionCatalog {
         data = JSONObject.parseObject(Files.readString(file, StandardCharsets.UTF_8));
         if (data == null || data.getJSONArray("characters") == null)
             throw new IOException("角色目录格式无效");
+        // Resolves the player name for all displays while preserving the source catalog.
+        for (JSONObject character : characters()) {
+            if (character.getJSONArray("voices") == null) continue;
+            for (JSONObject voice : character.getJSONArray("voices").toJavaList(JSONObject.class)) {
+                String text = voice.getString("text");
+                if (text != null) voice.put("text", text.replace("{@nickname}", "Joy"));
+            }
+        }
     }
 
     public List<JSONObject> characters() {
