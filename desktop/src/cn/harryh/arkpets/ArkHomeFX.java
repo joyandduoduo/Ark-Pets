@@ -55,6 +55,7 @@ public class ArkHomeFX extends Application {
     public ModelsModule modelsModule;
     public BehaviorModule behaviorModule;
     public SettingsModule settingsModule;
+    public CompanionSupport companions;
 
     static {
         FontsConfig.REGULAR.loadFontToJavafx();
@@ -66,6 +67,8 @@ public class ArkHomeFX extends Application {
         Logger.info("Launcher", "Starting");
         this.stage = stage;
         Platform.setImplicitExit(false);
+        String catalog = System.getProperty("arkpets.companion.catalog");
+        if (catalog != null) companions = new CompanionSupport(this, java.nio.file.Path.of(catalog));
 
         // Load FXML for root node.
         LoadFXMLResult<ArkHomeFX> fxml0 = FXMLHelper.loadFXML(getClass().getResource("/UI/RootModule.fxml"));
@@ -84,6 +87,7 @@ public class ArkHomeFX extends Application {
         stage.setScene(scene);
         stage.setTitle(desktopTitle);
         rootModule.titleText.setText(desktopTitle);
+        if (companions != null) rootModule.titleText.setText(desktopTitle + " · 角色陪伴");
 
         // After the stage is shown, do initialization.
         stage.show();
@@ -142,6 +146,7 @@ public class ArkHomeFX extends Application {
 
     @Override
     public void stop() {
+        if (companions != null) companions.close(config != null && config.launcher_solid_exit);
         if (config != null && config.launcher_solid_exit) {
             // Notify ArkPets core instances that connected to this app to close.
             HostTray.getInstance().forEachMemberTray(memberTray -> memberTray.sendOperation(SocketData.Operation.LOGOUT));

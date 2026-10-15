@@ -17,8 +17,10 @@ public final class CompanionUiSnapshot {
     public static void main(String[] args) { Application.launch(View.class, args); }
     public static final class View extends Application {
         @Override public void start(Stage stage) throws Exception {
-            new CompanionLauncher().startWithCatalog(stage, Path.of(getParameters().getNamed().get("catalog")));
-            PauseTransition delay = new PauseTransition(Duration.seconds(1));
+            System.setProperty("arkpets.companion.catalog", getParameters().getNamed().get("catalog"));
+            ArkHomeFX app = new ArkHomeFX();
+            app.start(stage);
+            PauseTransition delay = new PauseTransition(Duration.seconds(4));
             delay.setOnFinished(event -> {
                 try {
                     var image = stage.getScene().getRoot().snapshot(null, null);
@@ -28,7 +30,7 @@ public final class CompanionUiSnapshot {
                         for (int x = 0; x < png.getWidth(); x++) png.setRGB(x, y, reader.getArgb(x, y));
                     ImageIO.write(png, "png", Path.of(getParameters().getNamed().get("output")).toFile());
                 } catch (Exception e) { throw new RuntimeException(e); }
-                finally { stage.close(); Platform.exit(); }
+                finally { app.stop(); stage.close(); Platform.exit(); }
             });
             delay.play();
         }

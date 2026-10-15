@@ -7,6 +7,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Texture.TextureFilter;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas.TextureAtlasData;
 import com.esotericsoftware.spine.SkeletonBinary;
@@ -212,6 +214,25 @@ public class SkeletonLoader {
      */
     public SkeletonData loadSkeletonDataWith(FileHandle atlasFile, float scale, boolean forceMipmap) {
         TextureAtlasData atlasData = new TextureAtlasData(atlasFile, atlasFile.parent(), false);
+        // PRTS building textures may be downsampled while atlas coordinates retain their original size.
+        // Restore the declared page size in memory; preserve source files and their premultiplied alpha.
+        if (System.getProperty("arkpets.companion.catalog") != null) {
+            for (TextureAtlasData.Page page : atlasData.getPages()) {
+                Pixmap original = new Pixmap(page.textureFile);
+                try {
+                    int width = Math.round(page.width), height = Math.round(page.height);
+                    if (width > 0 && height > 0 && (original.getWidth() != width || original.getHeight() != height)) {
+                        Pixmap fitted = new Pixmap(width, height, Pixmap.Format.RGBA8888);
+                        try {
+                            fitted.setBlending(Pixmap.Blending.None);
+                            fitted.setFilter(Pixmap.Filter.BiLinear);
+                            fitted.drawPixmap(original, 0, 0, original.getWidth(), original.getHeight(), 0, 0, width, height);
+                            page.texture = new Texture(fitted, forceMipmap || page.useMipMaps);
+                        } finally { fitted.dispose(); }
+                    }
+                } finally { original.dispose(); }
+            }
+        }
         if (forceMipmap) {
             for (TextureAtlasData.Page page : atlasData.getPages()) {
                 page.minFilter = TextureFilter.MipMapLinearLinear;

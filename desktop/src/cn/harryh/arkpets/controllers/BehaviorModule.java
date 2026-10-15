@@ -21,12 +21,15 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import cn.harryh.arkpets.utils.FXMLHelper;
 import javafx.util.Duration;
 
 import static cn.harryh.arkpets.Const.durationFast;
 
 
 public final class BehaviorModule implements Controller<ArkHomeFX> {
+    @FXML private VBox companionPane;
     @FXML
     private ScrollPane moduleScroll;
 
@@ -114,6 +117,15 @@ public final class BehaviorModule implements Controller<ArkHomeFX> {
     @Override
     public void initializeWith(ArkHomeFX app) {
         this.app = app;
+        if (app.companions != null) {
+            try {
+                var extension = FXMLHelper.<ArkHomeFX>loadFXML("/UI/CompanionModule.fxml");
+                extension.addToNode(companionPane);
+                extension.initializeWith(app);
+                companionPane.setVisible(true);
+                companionPane.setManaged(true);
+            } catch (Exception error) { throw new IllegalStateException("陪伴设置未能载入", error); }
+        }
         initConfigBehavior();
         initScheduledListener();
         ScrollUtils.addSmoothScrolling(moduleScroll);

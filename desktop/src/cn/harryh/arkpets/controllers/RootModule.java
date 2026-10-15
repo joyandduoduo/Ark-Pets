@@ -165,6 +165,10 @@ public final class RootModule implements Controller<ArkHomeFX> {
      * @see EmbeddedLauncher
      */
     public void startArkPetsCore() {
+        if (app.companions != null) {
+            app.companions.launch();
+            return;
+        }
         Task<Boolean> task = new Task<>() {
             @Override
             protected Boolean call() throws InterruptedException, ExecutionException {
@@ -277,6 +281,11 @@ public final class RootModule implements Controller<ArkHomeFX> {
     private void initLaunchButton() {
         // Set handler for internal start button.
         launchBtn.setOnAction(e -> {
+            if (app.companions != null) {
+                app.config.save();
+                startArkPetsCore();
+                return;
+            }
             // When request to launch ArkPets:
             launchBtn.setDisable(true);
             app.config.save();
@@ -301,6 +310,7 @@ public final class RootModule implements Controller<ArkHomeFX> {
     private void initAnnoEntrance() {
         annoEntrance.setOnAction(e -> app.dialogs.popDialog("announceDialog"));
         ((AnnounceDialog) app.dialogs.getDialogController("announceDialog")).fetchAnnounce(false, () -> {
+            if (app.companions != null) return;
             Logger.info("Announce", "Need immediate show");
             annoEntrance.getOnAction().handle(
                     new ActionEvent(this, Event.NULL_SOURCE_TARGET)

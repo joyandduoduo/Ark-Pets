@@ -126,6 +126,10 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
     private Button modelExport;
     @FXML
     private Label modelHelp;
+    @FXML private VBox companionWardrobe;
+    @FXML private ComboBox<JSONObject> companionSkin;
+    @FXML private ComboBox<String> companionMode;
+    @FXML private Button companionSettings;
 
     private ModelItemGroup assetItemList;
     private ModelItemWrapper selectedModel;
@@ -165,6 +169,16 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
         initModelSearch();
         initModelFilter();
         initModelManage();
+        if (app.companions != null) {
+            companionWardrobe.setVisible(true);
+            companionWardrobe.setManaged(true);
+            infoPaneTagScroll.setPrefHeight(38);
+            app.companions.bindWardrobe(companionSkin, companionMode);
+            companionSettings.setOnAction(e -> app.rootModule.moduleWrapperComposer.activate(1));
+        }
+        modelListView.getSelectionModel().selectedItemProperty().addListener((o, before, value) -> {
+            if (value != null) selectCell(value);
+        });
         modelReload(false);
         Platform.runLater(() -> {
             GuiPrefabs.disableScrollPaneCache(infoPaneTagScroll);
@@ -173,6 +187,11 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
     }
 
     public boolean initModelsDataset(boolean doPopNotice) {
+        if (app.companions != null) {
+            app.modelsDataset = app.companions.dataset();
+            mngBtnComposer.activate(1);
+            return true;
+        }
         try {
             try {
                 // Read and initialize the dataset
@@ -485,6 +504,32 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
         });
 
         modelHelp.setOnMouseClicked(e -> app.popBrowser(urlOfficialHelpPage));
+        if (app.companions != null) {
+            modelUpdate.setText("模型来源");
+            modelUpdate.setOnAction(e -> app.popBrowser("https://prts.wiki/"));
+            modelReFetch.setText("重新载入");
+            modelReFetch.setOnAction(e -> modelReload(true));
+            modelVerify.setOnAction(e -> new VerifyModelsTask(app.body, GuiTask.GuiTaskStyle.COMMON, app.companions.allModelsDataset()).start());
+            modelImport.setText("打开素材");
+            modelImport.setOnAction(e -> app.popBrowser(app.companions.catalog.directory.toUri()));
+            modelExport.setOnAction(e -> {
+                FileChooser chooser = new FileChooser();
+                chooser.setInitialFileName("ArkPets-精选角色.zip");
+                chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Archives", "*.zip"));
+                File zip = chooser.showSaveDialog(app.getWindow());
+                if (zip == null) return;
+                HashMap<String, String> contents = new HashMap<>();
+                for (String name : java.util.List.of("catalog.json", "asset-receipts.json", "models", "voices", "sources"))
+                    contents.put(app.companions.catalog.directory.resolve(name).toString(), "companion-data/" + name);
+                new ZipTask(app.body, GuiTask.GuiTaskStyle.STRICT, zip.toString(), contents).start();
+            });
+            modelHelp.setText("精选角色素材与缺项说明");
+            modelHelp.setOnMouseClicked(e -> GuiPrefabs.Dialogs.createCommonDialog(app.body,
+                    GuiPrefabs.Icons.getIcon(GuiPrefabs.Icons.SVG_INFO_ALT, GuiPrefabs.COLOR_INFO),
+                    "精选角色模型库", "仅加载您选定的 11 位角色",
+                    "包含 25 套外观、74 套模型和 100 条普通话语音。Misery 来源中没有基建模型与普通话语音。",
+                    "验证模型会检查所有外观与战斗模型；导出会打包精选素材。原版的完整模型库下载仅用于普通启动模式。选项与行为页沿用原版。").show());
+        }
     }
 
     public void modelSearch(String keyWords) {
@@ -503,7 +548,7 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
             ModelItemGroup searched = filtered.searchByKeyWords(keyWords);
             long tEnd = System.nanoTime();
             int curSize = searched.size();
-            searchModelStatus.setText((rawSize == curSize ? rawSize : curSize + " / " + rawSize) + " 个模型");
+            searchModelStatus.setText((rawSize == curSize ? rawSize : curSize + " / " + rawSize) + (app.companions == null ? " 个模型" : " 位角色"));
             targetList.clear();
             targetList.setAll(searched);
             Logger.info("ModelManager", "Search \"%s\" (%d results, %.1f ms)"
@@ -540,11 +585,6 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
                     if (assetItemList.isEmpty())
                         throw new IOException("Found no assets in the target directories.");
                     // Initialize list view.
-                    modelListView.getSelectionModel().getSelectedItems().addListener(
-                            (ListChangeListener<ModelItem>) (observable -> observable.getList().forEach(
-                                    (Consumer<ModelItem>) this::selectCell)
-                            )
-                    );
                     modelListView.setCellFactory(listView -> new ModelListCell(listView.getPrefWidth() - 30, 30));
                     modelListView.setFixedCellSize(30);
                     // Write models to menu items.
@@ -607,6 +647,8 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
                         app.config.character_asset != null && !app.config.character_asset.isEmpty()) {
                     // Scroll to recent selected model and then select it.
                     ModelItem recentSelected = assetItemList.searchByRelPath(app.config.character_asset);
+                    if (recentSelected == null && app.companions != null)
+                        recentSelected = assetItemList.stream().filter(item -> item.name.equals(app.config.character_label)).findFirst().orElse(null);
                     if (recentSelected != null) {
                         for (ModelItem cell : modelListView.getItems())
                             if (recentSelected.equals(cell)) {
@@ -616,6 +658,8 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
                             }
                     }
                 }
+                if (app.companions != null && !targetList.isEmpty() && modelListView.getSelectionModel().getSelectedItem() == null)
+                    modelListView.getSelectionModel().selectFirst();
             }
 
             // Post process:
@@ -656,6 +700,7 @@ public final class ModelsModule implements Controller<ArkHomeFX> {
         app.config.character_asset = model.getLocation();
         app.config.character_files = model.assetList;
         app.config.character_label = model.name;
+        if (app.companions != null) app.companions.select(model.key);
     }
 
     private boolean assertModelLoaded(boolean doPopNotice) {

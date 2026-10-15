@@ -146,6 +146,17 @@ public class MemberTrayImpl extends MemberTray {
         popMenu.add(optKeepAnimDis, 1);
     }
 
+    /** Refreshes shape and manual-mode actions after changing the character's model. */
+    public void refreshCharacter() {
+        SwingUtilities.invokeLater(() -> {
+            popMenu.remove(optKeepAnimDis);
+            popMenu.remove(optKeepAnimEn);
+            popMenu.add(optKeepAnimEn, 1);
+            popMenu.remove(optChangeStage);
+            if (arkPets.canChangeStage()) popMenu.add(optChangeStage, popMenu.getComponentCount() - 1);
+        });
+    }
+
     @Override
     public void sendOperation(SocketData.Operation operation) {
         client.sendRequest(SocketData.ofOperation(uuid, operation));

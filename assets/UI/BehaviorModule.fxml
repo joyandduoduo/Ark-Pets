@@ -20,6 +20,7 @@
         <AnchorPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" minHeight="0.0" minWidth="0.0"
                     prefWidth="425.0" styleClass="config-field">
             <VBox>
+                <VBox fx:id="companionPane" visible="false" managed="false"/>
                 <Label styleClass="config-group-title" text="动作"/>
                 <HBox>
                     <JFXCheckBox fx:id="configBehaviorAllowWalk" mnemonicParsing="false" text="允许行走"/>

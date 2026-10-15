@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2026, ArkPets contributors. At GPL-3.0 License. -->
+<?import com.jfoenix.controls.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="cn.harryh.arkpets.controllers.CompanionModule" prefWidth="415">
+    <Label fx:id="characterName" styleClass="config-group-title" text="角色陪伴"/>
+    <HBox><JFXCheckBox fx:id="voiceEnabled" text="自动轮播普通话语音"/></HBox>
+    <HBox spacing="8">
+        <Label text="间隔（分钟）" style="-fx-pref-width: 165;"/>
+        <JFXComboBox fx:id="voiceMin" prefWidth="70"/>
+        <Label text="至" style="-fx-pref-width: 20;"/>
+        <JFXComboBox fx:id="voiceMax" prefWidth="70"/>
+    </HBox>
+    <HBox>
+        <Label text="语音音量"/>
+        <JFXSlider fx:id="voiceVolume" min="0" max="100" value="40" prefWidth="150"/>
+        <Label fx:id="voiceVolumeValue" style="-fx-pref-width: 35;"/>
+    </HBox>
+    <Label fx:id="voiceDetails" styleClass="config-help-text" maxWidth="405"/>
+    <HBox spacing="10">
+        <JFXButton fx:id="playVoice" text="现在说一句" styleClass="btn-secondary"/>
+        <JFXButton fx:id="stopCharacter" text="让他休息" styleClass="btn-secondary"/>
+    </HBox>
+    <Label fx:id="companionStatus" styleClass="config-help-text" maxWidth="405"/>
+    <Separator/>
+    <Label styleClass="config-group-title" text="战斗动作"/>
+    <Label text="在模型页切到战斗正面或背面后可用；播放结束返回待机。" styleClass="config-help-text" maxWidth="405"/>
+    <HBox spacing="8">
+        <JFXButton fx:id="attack" text="攻击" styleClass="btn-secondary"/>
+        <JFXButton fx:id="skill1" text="技能 1" styleClass="btn-secondary"/>
+        <JFXButton fx:id="skill2" text="技能 2" styleClass="btn-secondary"/>
+        <JFXButton fx:id="skill3" text="技能 3" styleClass="btn-secondary"/>
+    </HBox>
+    <Separator/>
+</VBox>

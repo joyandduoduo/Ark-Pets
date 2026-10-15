@@ -244,6 +244,7 @@ public class ArkPets extends InputApplicationAdaptor {
         behavior = nextBehavior;
         config = nextConfig;
         tray.keepAnim = null;
+        tray.refreshCharacter();
         plane.setObjSize(cha.camera.getWidth(), cha.camera.getHeight());
         plane.changePosition(0, center - cha.camera.getWidth() / 2f, floor);
         previous.dispose();

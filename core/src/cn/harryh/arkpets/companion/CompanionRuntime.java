@@ -91,9 +91,11 @@ public final class CompanionRuntime {
             variant = requested;
         }
         boolean wasEnabled = controls != null && controls.getBooleanValue("voiceEnabled");
+        boolean intervalChanged = controls == null || controls.getIntValue("voiceMinSeconds") != next.getIntValue("voiceMinSeconds")
+                || controls.getIntValue("voiceMaxSeconds") != next.getIntValue("voiceMaxSeconds");
         controls = next;
         if (!controls.getBooleanValue("voiceEnabled")) stopVoice();
-        if (!wasEnabled && controls.getBooleanValue("voiceEnabled")) schedule(System.currentTimeMillis());
+        if ((!wasEnabled || intervalChanged) && controls.getBooleanValue("voiceEnabled")) schedule(System.currentTimeMillis());
         if (voice != null) voice.setVolume(volume());
         String nextCommand = controls.getString("commandId");
         if (nextCommand != null && !nextCommand.equals(command)) {
@@ -162,6 +164,9 @@ public final class CompanionRuntime {
     private void writeStatus() throws IOException {
         JSONObject status = new JSONObject();
         status.put("pid", ProcessHandle.current().pid());
+        status.put("startedAt", ProcessHandle.current().info().startInstant().map(java.time.Instant::toEpochMilli).orElse(0L));
+        status.put("character", character.getString("id"));
+        status.put("catalogDirectory", catalog.directory.toString());
         status.put("variant", variant);
         status.put("gestures", pet.companionGestures());
         status.put("lastVoice", lastVoice);

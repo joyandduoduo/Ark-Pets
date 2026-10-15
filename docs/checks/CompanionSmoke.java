@@ -24,6 +24,7 @@ public final class CompanionSmoke extends ApplicationAdapter {
     private CompanionSmoke(CompanionCatalog catalog, Path report) { this.catalog = catalog; this.report = report; }
 
     public static void main(String[] args) throws Exception {
+        System.setProperty("arkpets.companion.catalog", args[0]);
         Files.createDirectories(Path.of("temp"));
         cn.harryh.arkpets.utils.Logger.initialize("logs/companion-smoke", 2);
         CompanionSmoke smoke = new CompanionSmoke(new CompanionCatalog(Path.of(args[0])), Path.of(args[1]));
@@ -52,11 +53,24 @@ public final class CompanionSmoke extends ApplicationAdapter {
                         config.character_asset = catalog.resolve(model.getString("asset")).toString();
                         config.character_files = model.getJSONObject("files");
                         config.canvas_sampling_interval = 120;
+                        config.transition_duration = 0;
+                        config.render_animation_mixture = 0;
                         cha = new ArkChar(config, .65f);
                         GeneralBehavior behavior = new GeneralBehavior(config, cha.animList);
                         cha.adjustCanvas(behavior.getCurrentStage());
                         cha.setAnimation(behavior.defaultAnim());
                         cha.render();
+                        if (System.getProperty("arkpets.check.frames") != null) {
+                            Path frame = Path.of(System.getProperty("arkpets.check.frames"), character.getString("id") + "_" + skin.getString("id") + "_" + mode + ".png");
+                            Files.createDirectories(frame.getParent());
+                            for (int sample = 0; sample < 12; sample++) cha.render();
+                            cha.camera.getFBO().begin();
+                            var pixels = cn.harryh.arkpets.render.PixmapWrapper.fromCamera(cha.camera);
+                            cha.camera.getFBO().end();
+                            pixels.savePixmap(new com.badlogic.gdx.files.FileHandle(frame.toFile()), true);
+                            pixels.dispose();
+                            result.put("frame", frame.toString());
+                        }
                         List<String> names = new ArrayList<>();
                         for (AnimClip clip : cha.animList) names.add(clip.fullName);
                         result.put("animations", names);

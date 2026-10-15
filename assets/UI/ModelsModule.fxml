@@ -125,6 +125,12 @@
             <Label fx:id="selectedModelAppellation" styleClass="info-secondary" text="Appellation"/>
             <Label fx:id="selectedModelSkinGroupName" styleClass="info-secondary" text="SkinGroup"/>
         </VBox>
+        <VBox fx:id="companionWardrobe" visible="false" managed="false" spacing="7.0"
+              AnchorPane.topAnchor="95.0" AnchorPane.leftAnchor="7.5" prefWidth="157.5">
+            <JFXComboBox fx:id="companionSkin" promptText="外观" prefWidth="157.5"/>
+            <JFXComboBox fx:id="companionMode" promptText="模型" prefWidth="157.5"/>
+            <JFXButton fx:id="companionSettings" text="语音与战斗动作" styleClass="btn-secondary" prefWidth="157.5"/>
+        </VBox>
         <VBox AnchorPane.bottomAnchor="0.0" prefWidth="${_infoPaneW}">
             <ScrollPane fx:id="infoPaneTagScroll" prefHeight="100.0" styleClass="flow-wrapper">
                 <FlowPane fx:id="infoPaneTagFlow" styleClass="tag-flow"/>
