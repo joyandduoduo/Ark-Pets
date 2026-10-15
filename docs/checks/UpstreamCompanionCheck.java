@@ -6,6 +6,8 @@ package cn.harryh.arkpets;
 import cn.harryh.arkpets.utils.ArgPending;
 import cn.harryh.arkpets.utils.GuiComponents.NamedItem;
 import cn.harryh.arkpets.utils.Logger;
+import cn.harryh.arkpets.controllers.CompanionVoicePicker;
+import cn.harryh.arkpets.companion.CompanionVoices;
 import com.alibaba.fastjson2.JSONObject;
 import javafx.animation.*;
 import javafx.application.*;
@@ -24,6 +26,8 @@ public final class UpstreamCompanionCheck extends Application {
             System.setProperty("arkpets.companion.catalog", args[0]);
             System.setProperty("arkpets.check.output", args[1]);
             ArgPending.argCache = new String[0];
+            try { Files.createDirectories(Path.of(Const.PathConfig.tempDirPath)); }
+            catch (Exception failure) { throw new RuntimeException(failure); }
             Logger.initialize("logs/upstream-check", 2);
             Application.launch(UpstreamCompanionCheck.class);
             System.exit(0);
@@ -62,7 +66,11 @@ public final class UpstreamCompanionCheck extends Application {
     }
 
     private void snapshot(String name) throws Exception {
-        var image = stage.getScene().getRoot().snapshot(null, null);
+        snapshotNode(stage.getScene().getRoot(), name);
+    }
+
+    private void snapshotNode(javafx.scene.Node node, String name) throws Exception {
+        var image = node.snapshot(null, null);
         var pixels = image.getPixelReader();
         BufferedImage png = new BufferedImage((int) image.getWidth(), (int) image.getHeight(), BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < png.getHeight(); y++) for (int x = 0; x < png.getWidth(); x++) png.setRGB(x, y, pixels.getArgb(x, y));
@@ -108,6 +116,34 @@ public final class UpstreamCompanionCheck extends Application {
                 phase = 2;
             } else if (phase == 2) {
                 snapshot("行为页");
+                for (String id : List.of("autoActions", "battleActions", "autoWardrobe", "bubbleEnabled", "activityMin", "activityMax",
+                        "wardrobeMin", "wardrobeMax", "bubbleTheme", "tryActivity", "changeWardrobe", "previewBubble"))
+                    check(control(id) != null, "Companion control missing: " + id);
+                ComboBox<Integer> minimum = control("activityMin"), maximum = control("activityMax");
+                minimum.setValue(180);
+                check(maximum.getValue() >= 180, "Activity interval order");
+                ComboBox<String> theme = control("bubbleTheme"); theme.setValue("terminal");
+                JSONObject saved = JSONObject.parseObject(Files.readString(app.companions.catalog.controls(app.companions.selected.getString("id"))));
+                check(saved.getIntValue("activityMinSeconds") == 180 && "terminal".equals(saved.getString("bubbleTheme")), "Companion preferences persisted");
+                check("terminal".equals(app.config.companion_preferences.getJSONObject(app.companions.selected.getString("id")).getString("bubbleTheme")), "ArkConfig profile persisted");
+                minimum.setValue(45); maximum.setValue(120); theme.setValue("rhodes");
+                snapshotNode(control("companionPane"), "陪伴设置完整页");
+                Stage picker = new CompanionVoicePicker(app.companions).open(stage);
+                picker.getScene().getRoot().applyCss(); picker.getScene().getRoot().layout();
+                snapshotNode(picker.getScene().getRoot(), "语音勾选面板");
+                ComboBox<JSONObject> sources = (ComboBox<JSONObject>) picker.getScene().lookup("#voiceSource");
+                check(sources.getItems().size() == 4, "Lappland default, voiced skin and original sources");
+                sources.getSelectionModel().select(2);
+                ((Button) picker.getScene().lookup("#voiceSelectAll")).fire();
+                check(CompanionVoices.enabled(app.companions.selected, app.companions.controls).size() == 48, "Selecting skin adds all 38 without replacing defaults");
+                sources.getSelectionModel().select(0);
+                ((Button) picker.getScene().lookup("#voiceSelectNone")).fire();
+                check(CompanionVoices.enabled(app.companions.selected, app.companions.controls).isEmpty(), "Clear playlist persists");
+                JSONObject playlist = JSONObject.parseObject(Files.readString(app.companions.catalog.controls(app.companions.selected.getString("id"))));
+                check(playlist.containsKey("selectedVoiceIds") && playlist.getJSONArray("selectedVoiceIds").isEmpty(), "Empty is distinct from defaults");
+                picker.close();
+                passed.add("Voice picker groups related operator and outfit; selections and explicit empty playlist persist");
+                passed.add("12 new companion controls retained in original behavior page; interval and theme persist");
                 app.rootModule.moduleWrapperComposer.activate(2);
                 phase = 3;
             } else if (phase == 3) {
@@ -121,6 +157,8 @@ public final class UpstreamCompanionCheck extends Application {
                 if (walk.isSelected()) walk.fire();
                 app.companions.controls.put("voiceEnabled", true);
                 app.companions.controls.put("volume", 0);
+                app.companions.controls.put("autoActions", false);
+                app.companions.controls.put("autoWardrobe", false);
                 app.companions.save();
                 app.rootModule.launchBtn.fire(); phase = 4;
             } else if (phase == 4 && app.companions.running() && state.getLongValue("pid") > 0 && !state.isEmpty()) {

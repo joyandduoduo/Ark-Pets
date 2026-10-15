@@ -13,6 +13,32 @@ import java.util.Map;
 public final class CompanionAnimations {
     private CompanionAnimations() {}
 
+    /** Gets the duration of a finite gesture, stopping before its looping idle. */
+    public static float duration(AnimData gesture) {
+        float seconds = 0;
+        for (AnimData part = gesture; part != null && !part.isLoop(); part = part.animNext()) seconds += part.animClip().duration;
+        return seconds;
+    }
+
+    /** Lists finite daily gestures that can safely return to idle. */
+    public static List<AnimData> daily(Iterable<AnimClip> clips, AnimData idle, boolean allowSit, boolean allowSleep, boolean allowInteract, boolean allowSpecial) {
+        List<AnimData> result = new ArrayList<>();
+        for (AnimClip clip : clips) {
+            if (!clip.stage.equals(idle.animClip().stage) || clip.duration <= 0 || clip.duration > 12) continue;
+            boolean allowed = switch (clip.type) {
+                case INTERACT -> allowInteract;
+                case SPECIAL -> allowSpecial;
+                case IDLE -> !clip.fullName.equals(idle.name());
+                case SIT -> allowSit;
+                case SLEEP -> allowSleep;
+                default -> false;
+            };
+            if (allowed && clip.modifier == AnimClip.AnimModifier.NONE)
+                result.add(new AnimData(clip, idle, false, true, 0));
+        }
+        return result;
+    }
+
     public static AnimData skill(Iterable<AnimClip> clips, int number, AnimData idle) {
         if (number < 0 || number > 3) return null;
         Map<String, AnimClip> names = new LinkedHashMap<>();

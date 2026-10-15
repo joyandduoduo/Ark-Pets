@@ -60,6 +60,8 @@ public class ArkConfig implements Serializable {
     public String       character_asset;
     /** @since ArkPets 3.5 */ @JSONField()
     public JSONObject   character_favorites;
+    /** @since Companion 0.2 */ @JSONField()
+    public JSONObject   companion_preferences = new JSONObject();
     /** @since ArkPets 2.2 */ @JSONField()
     public JSONObject   character_files;
     /** @since ArkPets 2.0 */ @JSONField()

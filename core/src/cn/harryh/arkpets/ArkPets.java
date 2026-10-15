@@ -8,6 +8,7 @@ import cn.harryh.arkpets.animations.AnimData;
 import cn.harryh.arkpets.animations.GeneralBehavior;
 import cn.harryh.arkpets.animations.CompanionAnimations;
 import cn.harryh.arkpets.companion.CompanionRuntime;
+import cn.harryh.arkpets.companion.CompanionSpeechBubble;
 import com.alibaba.fastjson2.JSONObject;
 import cn.harryh.arkpets.concurrent.SocketClient;
 import cn.harryh.arkpets.platform.HWndCtrl;
@@ -44,6 +45,9 @@ public class ArkPets extends InputApplicationAdaptor {
     public GeneralBehavior behavior;
     public TransitionVector2 windowPosition; // Window Position Easing
     private CompanionRuntime companion;
+    private final java.util.LinkedHashMap<String, ArkChar> companionModels = new java.util.LinkedHashMap<>();
+    private long lastCompanionInteraction;
+    public boolean companionSpeaking;
 
     private HWndCtrl hWndMine;
     private List<? extends HWndCtrl> hWndList;
@@ -153,6 +157,7 @@ public class ArkPets extends InputApplicationAdaptor {
         } else {
             newAnim = tray.keepAnim;
         }
+        if (companionSpeaking && tray.keepAnim == null) newAnim = behavior.defaultAnim();
 
         if (!isMouseDragging()) { // If no dragging:
             plane.updatePosition(Gdx.graphics.getDeltaTime());
@@ -184,6 +189,7 @@ public class ArkPets extends InputApplicationAdaptor {
         windowPosition.reset(plane.getX(), -(cha.camera.getHeight() + plane.getY()) + offsetY);
         windowPosition.addProgress(Gdx.graphics.getDeltaTime());
         updateWindow();
+        if (companion != null) companion.updateBubbleAnchor(companionHeadAnchor());
 
         // 4.Outline.
         boolean renderOutline = switch (ArkConfig.getRenderOutlineFrom(
@@ -219,6 +225,8 @@ public class ArkPets extends InputApplicationAdaptor {
         Logger.info("App", "Dispose");
         if (companion != null) companion.dispose();
         if (cha != null) cha.dispose();
+        companionModels.values().forEach(ArkChar::dispose);
+        companionModels.clear();
     }
 
     /** Changes wardrobe on the render thread while preserving the physical anchor. */
@@ -226,12 +234,13 @@ public class ArkPets extends InputApplicationAdaptor {
         ArkConfig nextConfig = JSONObject.parseObject(JSONObject.toJSONString(config), ArkConfig.class);
         nextConfig.character_asset = asset;
         nextConfig.character_files = files;
-        ArkChar replacement = new ArkChar(nextConfig, nextConfig.display_scale);
+        ArkChar replacement = companionModels.remove(asset);
+        if (replacement == null) replacement = new ArkChar(nextConfig, nextConfig.display_scale);
         GeneralBehavior nextBehavior;
         try {
             nextBehavior = new GeneralBehavior(nextConfig, replacement.animList);
             replacement.adjustCanvas(nextBehavior.getCurrentStage());
-            replacement.setAnimation(nextBehavior.defaultAnim());
+            replacement.resetAnimation(nextBehavior.defaultAnim());
             replacement.setAlpha(nextConfig.opacity_normal);
         } catch (RuntimeException failure) {
             replacement.dispose();
@@ -240,6 +249,9 @@ public class ArkPets extends InputApplicationAdaptor {
         float center = plane.getX() + cha.camera.getWidth() / 2f;
         float floor = plane.getY();
         ArkChar previous = cha;
+        String previousAsset = config.character_asset;
+        replacement.position.reset(replacement.position.end().x, replacement.position.end().y,
+                Math.signum(previous.position.end().z));
         cha = replacement;
         behavior = nextBehavior;
         config = nextConfig;
@@ -247,9 +259,43 @@ public class ArkPets extends InputApplicationAdaptor {
         tray.refreshCharacter();
         plane.setObjSize(cha.camera.getWidth(), cha.camera.getHeight());
         plane.changePosition(0, center - cha.camera.getWidth() / 2f, floor);
-        previous.dispose();
+        companionModels.put(previousAsset, previous);
+        while (companionModels.size() > 2) {
+            String oldest = companionModels.keySet().iterator().next();
+            companionModels.remove(oldest).dispose();
+        }
         Logger.info("Companion", "Changed wardrobe to " + asset);
     }
+
+    /** Gets a stable physical anchor above the pet's root, independent of animated bounds. */
+    public java.awt.Point companionHeadAnchor() {
+        return new java.awt.Point(Math.round(plane.getX() + cha.camera.getWidth() / 2f),
+                Math.round(-plane.getY() - 135 * config.display_scale));
+    }
+
+    /** Returns whether a new automatic gesture can start without interrupting interaction. */
+    public boolean canCompanionAct() {
+        return !isMouseDown() && !isMouseDragging() && !plane.getDropping() && tray.keepAnim == null
+                && System.currentTimeMillis() - lastCompanionInteraction > 5000
+                && (cha.getPlaying() == null || !cha.getPlaying().isStrict());
+    }
+
+    /** Lists finite daily gestures from the current model. */
+    public java.util.List<AnimData> companionDailyGestures() {
+        return CompanionAnimations.daily(cha.animList, behavior.defaultAnim(), config.behavior_allow_sit, config.behavior_allow_sleep,
+                config.behavior_allow_interact, config.behavior_allow_special);
+    }
+
+    /** Starts one bounded gesture on the render thread. */
+    public boolean playCompanionGesture(AnimData gesture) {
+        if (gesture == null || !canCompanionAct()) return false;
+        changeAnimation(gesture);
+        return true;
+    }
+
+    public AnimData companionSkill(int number) { return CompanionAnimations.skill(cha.animList, number, behavior.defaultAnim()); }
+
+    public void resetCompanionIdle() { cha.resetAnimation(behavior.defaultAnim()); }
 
     /** Plays one skill gesture without including a defeat animation. */
     public boolean playCompanionSkill(int number) {
@@ -306,6 +352,7 @@ public class ArkPets extends InputApplicationAdaptor {
     /* INPUT PROCESS */
     @Override
     protected void onMouseDown() {
+        lastCompanionInteraction = System.currentTimeMillis();
         if (!isMouseAtSolidPixel()) {
             // Transfer mouse event
             RelativeWindowPosition rwp = getUnderlyingRWP();
@@ -330,6 +377,7 @@ public class ArkPets extends InputApplicationAdaptor {
 
     @Override
     protected void onMouseDrag() {
+        lastCompanionInteraction = System.currentTimeMillis();
         if (getMouseButton() != Input.Buttons.RIGHT) {
             // Update window position
             int x = (int) (windowPosition.now().x + getMouseDeltaX());
@@ -454,6 +502,7 @@ public class ArkPets extends InputApplicationAdaptor {
     private HWndCtrl refreshWindowIndex() {
         refreshMonitorInfo();
         hWndList = WindowSystem.getWindowList(true);
+        hWndList.removeIf(CompanionSpeechBubble::owns);
         HWndCtrl minWindow = null;
         HashMap<Integer, HWndCtrl> line = new HashMap<>();
         int myPos = (int) (windowPosition.now().x + cha.camera.getWidth() / 2f);

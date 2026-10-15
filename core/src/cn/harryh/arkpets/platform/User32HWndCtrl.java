@@ -16,6 +16,25 @@ import java.util.ArrayList;
 
 
 public class User32HWndCtrl extends HWndCtrl {
+    /** Checks a native handle without exposing the owned window wrapper. */
+    public boolean hasNativeHandle(long handle) {
+        return com.sun.jna.Pointer.nativeValue(hWnd.getPointer()) == handle;
+    }
+
+    private static final com.sun.jna.WString COMPANION_BUBBLE_PROPERTY = new com.sun.jna.WString("ArkPets.Companion.SpeechBubble");
+
+    /** Marks an owned speech window so other pet processes also ignore it. */
+    public static void markCompanionBubble(long handle) {
+        int success = com.sun.jna.NativeLibrary.getInstance("user32").getFunction("SetPropW")
+                .invokeInt(new Object[]{new HWND(Pointer.createConstant(handle)), COMPANION_BUBBLE_PROPERTY, Pointer.createConstant(1)});
+        if (success == 0) throw new IllegalStateException("Could not mark companion speech window");
+    }
+
+    public boolean isCompanionBubble() {
+        Pointer marker = com.sun.jna.NativeLibrary.getInstance("user32").getFunction("GetPropW")
+                .invokePointer(new Object[]{hWnd, COMPANION_BUBBLE_PROPERTY});
+        return Pointer.nativeValue(marker) == 1;
+    }
     protected final HWND hWnd;
 
     public static final int WS_EX_TOPMOST       = 0x00000008;

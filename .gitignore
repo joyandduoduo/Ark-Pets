@@ -20,6 +20,7 @@ out/
 tmp*/
 temp*/
 test*/
+__pycache__/
 
 # Exclude AI agent files
 .claude/

@@ -13,6 +13,7 @@
     "canvas_sampling_interval":4,
     "character_asset":"",
     "character_favorites":{},
+    "companion_preferences":{},
     "character_files":{},
     "character_label":"",
     "display_fps":60,

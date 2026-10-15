@@ -5,6 +5,7 @@ package cn.harryh.arkpets.controllers;
 
 import cn.harryh.arkpets.ArkHomeFX;
 import cn.harryh.arkpets.CompanionSupport;
+import cn.harryh.arkpets.companion.CompanionVoices;
 import com.alibaba.fastjson2.JSONObject;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -12,6 +13,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import javafx.util.StringConverter;
 
 /** Binds companion additions inside the original behavior settings page. */
 public final class CompanionModule implements Controller<ArkHomeFX> {
@@ -20,11 +23,32 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
     @FXML private ComboBox<Integer> voiceMin, voiceMax;
     @FXML private Slider voiceVolume;
     @FXML private Button playVoice, stopCharacter, attack, skill1, skill2, skill3;
+    @FXML private CheckBox autoActions, battleActions, autoWardrobe, bubbleEnabled;
+    @FXML private ComboBox<Integer> activityMin, activityMax, wardrobeMin, wardrobeMax;
+    @FXML private ComboBox<String> bubbleTheme;
+    @FXML private Button changeWardrobe, tryActivity, previewBubble, chooseVoices;
     private CompanionSupport support;
     private boolean updating;
 
     @Override public void initializeWith(ArkHomeFX app) {
         support = app.companions;
+        activityMin.getItems().setAll(15, 30, 45, 60, 90, 120, 180, 300);
+        activityMax.getItems().setAll(activityMin.getItems());
+        wardrobeMin.getItems().setAll(5, 10, 15, 20, 30, 45, 60, 90, 120);
+        wardrobeMax.getItems().setAll(wardrobeMin.getItems());
+        bindInterval(activityMin, activityMax);
+        bindInterval(wardrobeMin, wardrobeMax);
+        for (CheckBox toggle : List.of(autoActions, battleActions, autoWardrobe, bubbleEnabled)) toggle.setOnAction(e -> save());
+        bubbleTheme.getItems().setAll("rhodes", "light", "terminal");
+        bubbleTheme.setConverter(new StringConverter<>() {
+            public String toString(String value) { return Map.of("rhodes", "罗德岛 · 深色", "light", "战术白", "terminal", "蓝调终端").getOrDefault(value == null ? "" : value, ""); }
+            public String fromString(String value) { return value; }
+        });
+        bubbleTheme.valueProperty().addListener((o, old, value) -> { if (!updating) save(); });
+        changeWardrobe.setOnAction(e -> support.command("wardrobe"));
+        tryActivity.setOnAction(e -> support.command("activity"));
+        previewBubble.setOnAction(e -> support.command("previewBubble"));
+        chooseVoices.setOnAction(e -> new CompanionVoicePicker(support).open(chooseVoices.getScene().getWindow()));
         for (int i = 1; i <= 120; i++) { voiceMin.getItems().add(i); voiceMax.getItems().add(i); }
         voiceEnabled.setOnAction(e -> save());
         voiceMin.valueProperty().addListener((o, old, value) -> {
@@ -59,6 +83,16 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         if (support.selected == null) return;
         updating = true;
         characterName.setText("角色陪伴 · " + support.selected.getString("name"));
+        autoActions.setSelected(support.controls.getBooleanValue("autoActions"));
+        battleActions.setSelected(support.controls.getBooleanValue("battleActions"));
+        autoWardrobe.setSelected(support.controls.getBooleanValue("autoWardrobe"));
+        bubbleEnabled.setSelected(support.controls.getBooleanValue("bubbleEnabled"));
+        bubbleTheme.setValue(support.controls.getString("bubbleTheme"));
+        activityMin.setValue(support.controls.getIntValue("activityMinSeconds"));
+        activityMax.setValue(support.controls.getIntValue("activityMaxSeconds"));
+        wardrobeMin.setValue(Math.max(1, support.controls.getIntValue("wardrobeMinSeconds") / 60));
+        wardrobeMax.setValue(Math.max(1, support.controls.getIntValue("wardrobeMaxSeconds") / 60));
+        autoWardrobe.setDisable(support.selected.getJSONArray("skins").size() < 2);
         voiceEnabled.setSelected(support.controls.getBooleanValue("voiceEnabled"));
         voiceMin.setValue(Math.max(1, support.controls.getIntValue("voiceMinSeconds") / 60));
         voiceMax.setValue(Math.max(1, support.controls.getIntValue("voiceMaxSeconds") / 60));
@@ -79,7 +113,33 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         support.controls.put("voiceMinSeconds", voiceMin.getValue() * 60);
         support.controls.put("voiceMaxSeconds", voiceMax.getValue() * 60);
         support.controls.put("volume", voiceVolume.getValue() / 100);
+        support.controls.put("autoActions", autoActions.isSelected());
+        support.controls.put("battleActions", battleActions.isSelected());
+        support.controls.put("autoWardrobe", autoWardrobe.isSelected());
+        support.controls.put("bubbleEnabled", bubbleEnabled.isSelected());
+        if (bubbleTheme.getValue() != null) support.controls.put("bubbleTheme", bubbleTheme.getValue());
+        if (activityMin.getValue() != null && activityMax.getValue() != null) {
+            support.controls.put("activityMinSeconds", activityMin.getValue());
+            support.controls.put("activityMaxSeconds", activityMax.getValue());
+        }
+        if (wardrobeMin.getValue() != null && wardrobeMax.getValue() != null) {
+            support.controls.put("wardrobeMinSeconds", wardrobeMin.getValue() * 60);
+            support.controls.put("wardrobeMaxSeconds", wardrobeMax.getValue() * 60);
+        }
         support.save();
+    }
+
+    private void bindInterval(ComboBox<Integer> min, ComboBox<Integer> max) {
+        min.valueProperty().addListener((o, old, value) -> {
+            if (updating || value == null) return;
+            if (max.getValue() != null && value > max.getValue()) max.setValue(value);
+            save();
+        });
+        max.valueProperty().addListener((o, old, value) -> {
+            if (updating || value == null) return;
+            if (min.getValue() != null && value < min.getValue()) min.setValue(value);
+            save();
+        });
     }
 
     private void refresh() {
@@ -87,8 +147,12 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         boolean running = support.running();
         JSONObject state = support.state();
         int count = support.selected.getJSONArray("voices").size();
-        playVoice.setDisable(!running || count == 0);
+        int enabled = CompanionVoices.enabled(support.selected, support.controls).size();
+        playVoice.setDisable(!running || enabled == 0);
         stopCharacter.setDisable(!running);
+        changeWardrobe.setDisable(!running || support.selected.getJSONArray("skins").size() < 2);
+        tryActivity.setDisable(!running);
+        previewBubble.setDisable(!running || count == 0);
         List<Button> buttons = List.of(attack, skill1, skill2, skill3);
         buttons.forEach(b -> b.setDisable(true));
         String requested = support.controls.getString("skin") + "/" + support.controls.getString("mode");
@@ -97,11 +161,12 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         companionStatus.setText(support.statusText());
         if (count == 0) voiceDetails.setText("来源中未提供这位角色的普通话语音。");
         else {
-            String text = count + " 条普通话语音 · 一轮内不重复，多角色错开播放";
+            String text = "已勾选 " + enabled + " / " + count + " 条普通话语音 · 一轮内不重复";
+            if (enabled == 0) text += "\n尚未勾选语音，轮播保持安静。";
             if (running && support.controls.getBooleanValue("voiceEnabled") && state.getLongValue("nextVoiceAt") > 0)
                 text += "\n下次约 " + DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(state.getLongValue("nextVoiceAt")));
             if (running && state.getString("voiceTitle") != null && !state.getString("voiceTitle").isEmpty())
-                text += "\n" + state.getString("voiceTitle") + "：" + state.getString("voiceText");
+                text += "\n最近播放：" + state.getString("voiceTitle");
             voiceDetails.setText(text);
         }
     }

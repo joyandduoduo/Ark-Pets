@@ -6,6 +6,19 @@
 <VBox xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="cn.harryh.arkpets.controllers.CompanionModule" prefWidth="415">
     <Label fx:id="characterName" styleClass="config-group-title" text="角色陪伴"/>
+    <HBox><JFXCheckBox fx:id="autoActions" text="自动活动"/><JFXCheckBox fx:id="battleActions" text="穿插战斗动作"/></HBox>
+    <HBox spacing="8">
+        <Label text="动作间隔（秒）" style="-fx-pref-width: 165;"/>
+        <JFXComboBox fx:id="activityMin" prefWidth="70"/><Label text="至" style="-fx-pref-width: 20;"/><JFXComboBox fx:id="activityMax" prefWidth="70"/>
+    </HBox>
+    <HBox><JFXCheckBox fx:id="autoWardrobe" text="自动换装"/><JFXButton fx:id="changeWardrobe" text="换一套" styleClass="btn-secondary"/></HBox>
+    <HBox spacing="8">
+        <Label text="换装间隔（分钟）" style="-fx-pref-width: 165;"/>
+        <JFXComboBox fx:id="wardrobeMin" prefWidth="70"/><Label text="至" style="-fx-pref-width: 20;"/><JFXComboBox fx:id="wardrobeMax" prefWidth="70"/>
+    </HBox>
+    <HBox><JFXButton fx:id="tryActivity" text="来点动作" styleClass="btn-secondary"/></HBox>
+    <Label text="穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。" styleClass="config-help-text" maxWidth="405"/>
+    <Separator/>
     <HBox><JFXCheckBox fx:id="voiceEnabled" text="自动轮播普通话语音"/></HBox>
     <HBox spacing="8">
         <Label text="间隔（分钟）" style="-fx-pref-width: 165;"/>
@@ -19,9 +32,12 @@
         <Label fx:id="voiceVolumeValue" style="-fx-pref-width: 35;"/>
     </HBox>
     <Label fx:id="voiceDetails" styleClass="config-help-text" maxWidth="405"/>
+    <HBox><JFXButton fx:id="chooseVoices" text="选择轮播语音…" styleClass="btn-secondary"/></HBox>
+    <HBox><JFXCheckBox fx:id="bubbleEnabled" text="显示台词气泡"/><JFXComboBox fx:id="bubbleTheme" prefWidth="165"/></HBox>
     <HBox spacing="10">
         <JFXButton fx:id="playVoice" text="现在说一句" styleClass="btn-secondary"/>
         <JFXButton fx:id="stopCharacter" text="让他休息" styleClass="btn-secondary"/>
+        <JFXButton fx:id="previewBubble" text="预览气泡" styleClass="btn-secondary"/>
     </HBox>
     <Label fx:id="companionStatus" styleClass="config-help-text" maxWidth="405"/>
     <Separator/>

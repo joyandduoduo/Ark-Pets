@@ -151,6 +151,12 @@ public class ArkChar {
         return composer.offer(animData);
     }
 
+    /** Resets a cached model before reusing it for another activity. */
+    public void resetAnimation(AnimData animData) {
+        composer.reset();
+        composer.offer(animData);
+    }
+
     /** Releases the resources of an old wardrobe on the render thread. */
     public void dispose() {
         spineRenderPass.dispose();

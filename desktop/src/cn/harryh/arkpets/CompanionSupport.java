@@ -6,6 +6,7 @@ package cn.harryh.arkpets;
 import cn.harryh.arkpets.assets.ModelItem;
 import cn.harryh.arkpets.assets.ModelsDataset;
 import cn.harryh.arkpets.companion.CompanionCatalog;
+import cn.harryh.arkpets.companion.CompanionPreferences;
 import cn.harryh.arkpets.utils.Logger;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -142,6 +143,10 @@ public final class CompanionSupport {
             selected = catalog.character(id);
             Path file = catalog.controls(id);
             controls = Files.exists(file) ? JSONObject.parseObject(Files.readString(file)) : new JSONObject();
+            if (app.config.companion_preferences == null) app.config.companion_preferences = new JSONObject();
+            JSONObject profile = app.config.companion_preferences.getJSONObject(id);
+            if (profile != null) profile.forEach(controls::putIfAbsent);
+            CompanionPreferences.defaults(controls);
             controls.putIfAbsent("voiceEnabled", true);
             controls.putIfAbsent("volume", .4);
             controls.putIfAbsent("voiceMinSeconds", 600);
@@ -179,7 +184,15 @@ public final class CompanionSupport {
 
     public void save() {
         if (selected == null) return;
-        try { writeControls(selected.getString("id"), controls); }
+        try {
+            writeControls(selected.getString("id"), controls);
+            if (app.config.companion_preferences == null) app.config.companion_preferences = new JSONObject();
+            JSONObject profile = new JSONObject();
+            for (String key : CompanionPreferences.DEFAULTS.keySet()) profile.put(key, controls.get(key));
+            if (controls.containsKey("selectedVoiceIds")) profile.put("selectedVoiceIds", controls.getJSONArray("selectedVoiceIds"));
+            app.config.companion_preferences.put(selected.getString("id"), profile);
+            app.config.save();
+        }
         catch (Exception error) { fail(error); }
     }
 
@@ -277,11 +290,28 @@ public final class CompanionSupport {
         if (!message.isEmpty()) return message;
         if (!running()) return "未启动 · 在左侧点击启动";
         JSONObject state = state();
+        if (state.getString("activity") != null && !state.getString("activity").isEmpty()) return "自动活动 · " + state.getString("activity");
         if (state.getString("error") != null && !state.getString("error").isEmpty()) return "未能应用：" + state.getString("error");
         return "陪伴中 · " + MODE_LABELS.getOrDefault(controls.getString("mode"), "");
     }
 
     private void refresh() {
+        if (selected != null && running() && !starting.contains(selected.getString("id"))) {
+            try {
+                JSONObject latest = JSONObject.parseObject(Files.readString(catalog.controls(selected.getString("id"))));
+                if (latest != null && (!Objects.equals(latest.getString("skin"), controls.getString("skin"))
+                        || !Objects.equals(latest.getString("mode"), controls.getString("mode")))) {
+                    controls = latest;
+                    updating = true;
+                    JSONObject skin = defaultSkin(selected, controls);
+                    skins.setValue(skin);
+                    updateModes(skin, controls.getString("mode"));
+                    updating = false;
+                    saveWardrobe();
+                    onSelection.run();
+                }
+            } catch (Exception ignored) { updating = false; }
+        }
         if (selected != null) {
             app.rootModule.launchBtn.setText(running() ? "重启" : "启动");
             if (app.rootModule.launchBtn.getTooltip() == null)
