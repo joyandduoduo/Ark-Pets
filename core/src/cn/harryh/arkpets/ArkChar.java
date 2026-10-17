@@ -157,6 +157,9 @@ public class ArkChar {
         composer.offer(animData);
     }
 
+    /** Enables pose-preserving completion transitions for the companion trial. */
+    public void setSmoothCompanionChains(boolean enabled) { composer.setSmoothChains(enabled); }
+
     /** Releases the resources of an old wardrobe on the render thread. */
     public void dispose() {
         spineRenderPass.dispose();

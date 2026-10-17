@@ -7,6 +7,7 @@ import cn.harryh.arkpets.animations.AnimClip;
 import cn.harryh.arkpets.animations.AnimData;
 import cn.harryh.arkpets.animations.GeneralBehavior;
 import cn.harryh.arkpets.animations.CompanionAnimations;
+import cn.harryh.arkpets.animations.CompanionShowcase;
 import cn.harryh.arkpets.companion.CompanionRuntime;
 import cn.harryh.arkpets.companion.CompanionSpeechBubble;
 import com.alibaba.fastjson2.JSONObject;
@@ -45,6 +46,7 @@ public class ArkPets extends InputApplicationAdaptor {
     public GeneralBehavior behavior;
     public TransitionVector2 windowPosition; // Window Position Easing
     private CompanionRuntime companion;
+    private float companionOpacity = 1;
     private final java.util.LinkedHashMap<String, ArkChar> companionModels = new java.util.LinkedHashMap<>();
     private long lastCompanionInteraction;
     public boolean companionSpeaking;
@@ -259,6 +261,11 @@ public class ArkPets extends InputApplicationAdaptor {
         tray.refreshCharacter();
         plane.setObjSize(cha.camera.getWidth(), cha.camera.getHeight());
         plane.changePosition(0, center - cha.camera.getWidth() / 2f, floor);
+        if (companionOpacity < 1) {
+            // Moves the resized transparent window before the new model fades in.
+            windowPosition.reset(plane.getX(), -(cha.camera.getHeight() + plane.getY()) + offsetY);
+            windowPosition.setToEnd();
+        }
         companionModels.put(previousAsset, previous);
         while (companionModels.size() > 2) {
             String oldest = companionModels.keySet().iterator().next();
@@ -295,6 +302,17 @@ public class ArkPets extends InputApplicationAdaptor {
 
     public AnimData companionSkill(int number) { return CompanionAnimations.skill(cha.animList, number, behavior.defaultAnim()); }
 
+    public CompanionShowcase.Plan companionShowcase(int skill) { return CompanionShowcase.ling(cha.animList, skill, behavior.defaultAnim()); }
+
+    public void setCompanionOpacity(float factor) {
+        companionOpacity = Math.max(0, Math.min(1, factor));
+        cha.setAlpha((isAlwaysTransparent ? config.opacity_dim : config.opacity_normal) * companionOpacity);
+    }
+
+    public float companionOpacity() { return companionOpacity; }
+    public float companionCenterX() { return plane.getX() + cha.camera.getWidth() / 2f; }
+    public float companionFacing() { return Math.signum(cha.position.end().z); }
+
     public void resetCompanionIdle() { cha.resetAnimation(behavior.defaultAnim()); }
 
     /** Plays one skill gesture without including a defeat animation. */
@@ -329,7 +347,7 @@ public class ArkPets extends InputApplicationAdaptor {
 
     public void setTransparentMode(boolean enable) {
         isAlwaysTransparent = enable;
-        cha.setAlpha(enable ? config.opacity_dim : config.opacity_normal);
+        setCompanionOpacity(companionOpacity);
     }
 
     private void changeAnimation(AnimData animData) {
@@ -364,6 +382,7 @@ public class ArkPets extends InputApplicationAdaptor {
                     default -> HWndCtrl.MouseEvent.EMPTY;
                 });
         } else {
+            if (companion != null) companion.interruptShowcase();
             if (getMouseButton() == Input.Buttons.LEFT) {
                 // Left Click: Play the specified animation
                 changeAnimation(behavior.clickStart());

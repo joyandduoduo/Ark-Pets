@@ -6,6 +6,7 @@ package cn.harryh.arkpets.companion;
 import cn.harryh.arkpets.ArkPets;
 import cn.harryh.arkpets.animations.AnimData;
 import cn.harryh.arkpets.animations.CompanionAnimations;
+import cn.harryh.arkpets.animations.CompanionShowcase;
 import cn.harryh.arkpets.utils.Logger;
 import com.alibaba.fastjson2.JSONObject;
 import com.badlogic.gdx.Gdx;
@@ -43,6 +44,18 @@ public final class CompanionRuntime {
     private int activityCount, wardrobeCount;
     private boolean wardrobeRequested;
     private boolean bubblePreview;
+    private boolean showcaseActive;
+    private int showcaseCount, statusWriteRetries;
+    private float activitySeconds;
+    private long statusBlockedSince;
+    private ModelTransition modelTransition;
+
+    private static final class ModelTransition {
+        final Runnable swap;
+        long started = System.currentTimeMillis();
+        boolean swapped;
+        ModelTransition(Runnable swap) { this.swap = swap; }
+    }
 
     private CompanionRuntime(ArkPets pet, Path file, String id) throws IOException {
         this.pet = pet;
@@ -73,9 +86,16 @@ public final class CompanionRuntime {
             }
             if (voice == null && now >= readUntil) bubble.hide();
             pet.companionSpeaking = voice != null || now < readUntil;
+            if (modelTransition != null) { updateTransition(now); return; }
             if (!activity.isEmpty() && now - activityStarted >= 350) {
                 AnimData playing = pet.cha.getPlaying();
-                if (playing == null || !playing.isStrict() || now >= activityDeadline) finishActivity(now);
+                if (playing == null || !playing.isStrict() || now >= activityDeadline) {
+                    if (showcaseActive) {
+                        modelTransition = new ModelTransition(() -> restoreActivity(System.currentTimeMillis()));
+                        return;
+                    }
+                    finishActivity(now);
+                }
             }
             boolean available = activity.isEmpty() && voice == null && now >= readUntil && pet.canCompanionAct();
             if (available && (wardrobeRequested || (controls.getBooleanValue("autoWardrobe") && now >= nextWardrobeAt))) {
@@ -98,6 +118,8 @@ public final class CompanionRuntime {
         lastError = "";
         String requested = next.getString("skin") + "/" + next.getString("mode");
         if (!requested.equals(desiredVariant)) {
+            cancelTransition();
+            showcaseActive = false;
             activity = "";
             applyVariant(next.getString("skin"), next.getString("mode"));
             desiredVariant = requested;
@@ -123,7 +145,8 @@ public final class CompanionRuntime {
         bubble.theme(controls.getString("bubbleTheme"));
         if (actionsChanged) nextActivityAt = after(System.currentTimeMillis(), "activity", 45, 120);
         if (wardrobeChanged) nextWardrobeAt = after(System.currentTimeMillis(), "wardrobe", 1800, 3600);
-        if (!controls.getBooleanValue("autoActions") && !activity.isEmpty()) finishActivity(System.currentTimeMillis());
+        if ((!controls.getBooleanValue("autoActions") || (showcaseActive && !controls.getBooleanValue("battleActions")))
+                && !activity.isEmpty()) finishActivity(System.currentTimeMillis());
         String id = controls.getString("commandId");
         if (id != null && !id.equals(command)) {
             command = id;
@@ -131,6 +154,11 @@ public final class CompanionRuntime {
             switch (action) {
                 case "voice" -> { if (!activity.isEmpty()) finishActivity(System.currentTimeMillis()); playVoice(); }
                 case "activity" -> { if (voice == null && System.currentTimeMillis() >= readUntil && pet.canCompanionAct()) startActivity(System.currentTimeMillis()); }
+                case "showcase" -> {
+                    if (CompanionShowcase.supports(character.getString("id")) && activity.isEmpty()
+                            && voice == null && System.currentTimeMillis() >= readUntil && pet.canCompanionAct())
+                        startActivity(System.currentTimeMillis(), true);
+                }
                 case "wardrobe" -> wardrobeRequested = true;
                 case "previewBubble" -> previewBubble();
                 case "attack", "skill1", "skill2", "skill3" -> {
@@ -175,11 +203,13 @@ public final class CompanionRuntime {
         variant = skin + "/" + mode;
     }
 
-    private void startActivity(long now) {
+    private void startActivity(long now) { startActivity(now, false); }
+
+    private void startActivity(long now, boolean forceBattle) {
         if (!activity.isEmpty() || !pet.canCompanionAct()) return;
         restoreSkin = controls.getString("skin"); restoreMode = controls.getString("mode");
         List<AnimData> daily = pet.companionDailyGestures();
-        boolean battle = controls.getBooleanValue("battleActions") && (!"building".equals(restoreMode)
+        boolean battle = forceBattle || controls.getBooleanValue("battleActions") && (!"building".equals(restoreMode)
                 || daily.isEmpty() || activityCount % 3 == 2 || ThreadLocalRandom.current().nextInt(100) < 45);
         AnimData chosen = null;
         String label = "日常";
@@ -188,6 +218,14 @@ public final class CompanionRuntime {
             List<String> modes = List.of("battle-front", "battle-back").stream().filter(models::containsKey).toList();
             if (!modes.isEmpty()) {
                 String mode = modes.get(ThreadLocalRandom.current().nextInt(modes.size()));
+                if (CompanionShowcase.supports(character.getString("id"))) {
+                    String targetSkin = restoreSkin;
+                    String targetMode = forceBattle ? modes.get(0) : mode;
+                    showcaseActive = true;
+                    activity = "战斗展示 · 切入";
+                    modelTransition = new ModelTransition(() -> startShowcase(targetSkin, targetMode));
+                    return;
+                }
                 applyVariant(restoreSkin, mode);
                 List<AnimData> gestures = new ArrayList<>();
                 for (int i = 0; i <= 3; i++) {
@@ -215,7 +253,8 @@ public final class CompanionRuntime {
         if (chosen != null && pet.playCompanionGesture(chosen)) {
             activity = label + " · " + chosen.name();
             lastActivity = chosen.name(); activityStarted = System.currentTimeMillis();
-            activityDeadline = activityStarted + Math.round((CompanionAnimations.duration(chosen) + 2) * 1000);
+            activitySeconds = CompanionAnimations.duration(chosen);
+            activityDeadline = activityStarted + Math.round((activitySeconds + 2) * 1000);
             activityCount++;
             recentActivities.addLast(activity);
             while (recentActivities.size() > 12) recentActivities.removeFirst();
@@ -224,10 +263,61 @@ public final class CompanionRuntime {
     }
 
     private void finishActivity(long now) {
+        cancelTransition();
+        restoreActivity(now);
+    }
+
+    private void restoreActivity(long now) {
+        pet.cha.setSmoothCompanionChains(false);
+        showcaseActive = false;
         activity = "";
         applyVariant(controls.getString("skin"), controls.getString("mode"));
+        pet.cha.setSmoothCompanionChains(false);
         pet.resetCompanionIdle();
         nextActivityAt = after(now, "activity", 45, 120);
+    }
+
+    private void startShowcase(String targetSkin, String targetMode) {
+        applyVariant(targetSkin, targetMode);
+        int skill = showcaseCount % 3 == 1 ? 2 : 3;
+        CompanionShowcase.Plan plan = pet.companionShowcase(skill);
+        if (plan == null) { restoreActivity(System.currentTimeMillis()); return; }
+        pet.cha.setSmoothCompanionChains(true);
+        if (!pet.playCompanionGesture(plan.animation())) { restoreActivity(System.currentTimeMillis()); return; }
+        activity = (targetMode.equals("battle-front") ? "战斗正面" : "战斗背面") + " · 技能" + skill + "驻留";
+        lastActivity = plan.animation().name();
+        activityStarted = System.currentTimeMillis();
+        activitySeconds = plan.seconds();
+        activityDeadline = activityStarted + Math.round((activitySeconds + 2) * 1000);
+        showcaseCount++; activityCount++;
+        recentActivities.addLast(activity);
+        while (recentActivities.size() > 12) recentActivities.removeFirst();
+    }
+
+    private void updateTransition(long now) {
+        ModelTransition current = modelTransition;
+        float fraction = Math.min(1, Math.max(0, (now - current.started) / 220f));
+        float eased = fraction * fraction * (3 - 2 * fraction);
+        pet.setCompanionOpacity(current.swapped ? eased : 1 - eased);
+        if (fraction < 1) return;
+        if (!current.swapped) {
+            try { current.swap.run(); }
+            catch (RuntimeException failure) { finishActivity(System.currentTimeMillis()); throw failure; }
+            pet.setCompanionOpacity(0);
+            current.swapped = true;
+            current.started = System.currentTimeMillis();
+        } else { modelTransition = null; pet.setCompanionOpacity(1); }
+    }
+
+    private void cancelTransition() {
+        modelTransition = null;
+        pet.setCompanionOpacity(1);
+        pet.cha.setSmoothCompanionChains(false);
+    }
+
+    /** Lets direct mouse interaction immediately reclaim a long presentation. */
+    public void interruptShowcase() {
+        if (showcaseActive || modelTransition != null) finishActivity(System.currentTimeMillis());
     }
 
     private void changeWardrobe(long now) throws IOException {
@@ -332,10 +422,25 @@ public final class CompanionRuntime {
         status.put("playing", pet.cha.getPlaying() == null ? "" : pet.cha.getPlaying().name());
         status.put("nextVoiceAt", nextVoiceAt); status.put("nextActivityAt", nextActivityAt); status.put("nextWardrobeAt", nextWardrobeAt);
         status.put("activity", activity); status.put("activityCount", activityCount); status.put("wardrobeCount", wardrobeCount);
+        status.put("battleShowcase", showcaseActive); status.put("showcaseCount", showcaseCount);
+        status.put("activitySeconds", activitySeconds); status.put("transitioning", modelTransition != null);
+        status.put("transitionOpacity", pet.companionOpacity());
+        status.put("petCenterX", pet.companionCenterX()); status.put("petFacing", pet.companionFacing());
+        status.put("statusWriteRetries", statusWriteRetries);
         status.put("recentActivities", List.copyOf(recentActivities)); status.put("bubble", bubble.status());
         status.put("petX", pet.plane.getX()); status.put("petY", pet.plane.getY());
         status.put("error", lastError); status.put("updatedAt", System.currentTimeMillis());
-        atomic(statusFile, status);
+        try { atomic(statusFile, status); statusBlockedSince = 0; }
+        catch (AccessDeniedException busyReader) {
+            // Windows readers can briefly deny replacement. Reporting must not reset activity timers.
+            statusWriteRetries++;
+            long now = System.currentTimeMillis();
+            if (statusBlockedSince == 0) statusBlockedSince = now;
+            else if (now - statusBlockedSince > 5000) {
+                Logger.warn("Companion", "Status file remains busy; publication will be retried");
+                statusBlockedSince = now;
+            }
+        }
     }
 
     public void dispose() { stopVoice(true); pet.companionSpeaking = false; bubble.dispose(); }

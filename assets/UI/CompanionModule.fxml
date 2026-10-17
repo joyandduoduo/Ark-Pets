@@ -16,8 +16,8 @@
         <Label text="换装间隔（分钟）" style="-fx-pref-width: 165;"/>
         <JFXComboBox fx:id="wardrobeMin" prefWidth="70"/><Label text="至" style="-fx-pref-width: 20;"/><JFXComboBox fx:id="wardrobeMax" prefWidth="70"/>
     </HBox>
-    <HBox><JFXButton fx:id="tryActivity" text="来点动作" styleClass="btn-secondary"/></HBox>
-    <Label text="穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。" styleClass="config-help-text" maxWidth="405"/>
+    <HBox><JFXButton fx:id="tryActivity" text="来点动作" styleClass="btn-secondary"/><JFXButton fx:id="previewBattle" text="展示战斗" styleClass="btn-secondary" visible="false" managed="false"/></HBox>
+    <Label fx:id="activityHelp" text="穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。" styleClass="config-help-text" maxWidth="405"/>
     <Separator/>
     <HBox><JFXCheckBox fx:id="voiceEnabled" text="自动轮播普通话语音"/></HBox>
     <HBox spacing="8">

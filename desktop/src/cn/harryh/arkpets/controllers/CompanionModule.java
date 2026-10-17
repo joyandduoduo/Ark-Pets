@@ -6,6 +6,7 @@ package cn.harryh.arkpets.controllers;
 import cn.harryh.arkpets.ArkHomeFX;
 import cn.harryh.arkpets.CompanionSupport;
 import cn.harryh.arkpets.companion.CompanionVoices;
+import cn.harryh.arkpets.animations.CompanionShowcase;
 import com.alibaba.fastjson2.JSONObject;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -26,7 +27,8 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
     @FXML private CheckBox autoActions, battleActions, autoWardrobe, bubbleEnabled;
     @FXML private ComboBox<Integer> activityMin, activityMax, wardrobeMin, wardrobeMax;
     @FXML private ComboBox<String> bubbleTheme;
-    @FXML private Button changeWardrobe, tryActivity, previewBubble, chooseVoices;
+    @FXML private Button changeWardrobe, tryActivity, previewBattle, previewBubble, chooseVoices;
+    @FXML private Label activityHelp;
     private CompanionSupport support;
     private boolean updating;
 
@@ -47,6 +49,7 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         bubbleTheme.valueProperty().addListener((o, old, value) -> { if (!updating) save(); });
         changeWardrobe.setOnAction(e -> support.command("wardrobe"));
         tryActivity.setOnAction(e -> support.command("activity"));
+        previewBattle.setOnAction(e -> support.command("showcase"));
         previewBubble.setOnAction(e -> support.command("previewBubble"));
         chooseVoices.setOnAction(e -> new CompanionVoicePicker(support).open(chooseVoices.getScene().getWindow()));
         for (int i = 1; i <= 120; i++) { voiceMin.getItems().add(i); voiceMax.getItems().add(i); }
@@ -145,6 +148,12 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
     private void refresh() {
         if (support.selected == null) return;
         boolean running = support.running();
+        boolean showcase = CompanionShowcase.supports(support.selected.getString("id"));
+        previewBattle.setVisible(showcase); previewBattle.setManaged(showcase);
+        previewBattle.setDisable(!running || support.state().getBooleanValue("battleShowcase"));
+        activityHelp.setText(showcase
+                ? "令：战斗形态与技能待机多停留一会儿，普攻一次；结束后回到所选模型。点击角色或切换模型可提前结束。"
+                : "穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。");
         JSONObject state = support.state();
         int count = support.selected.getJSONArray("voices").size();
         int enabled = CompanionVoices.enabled(support.selected, support.controls).size();

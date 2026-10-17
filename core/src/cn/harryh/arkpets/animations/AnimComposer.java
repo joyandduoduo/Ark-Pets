@@ -10,6 +10,9 @@ public class AnimComposer {
     protected final AnimationState state;
     protected final int coreTrackId = 0;
     protected AnimData playing;
+    private boolean smoothChains;
+
+    public void setSmoothChains(boolean enabled) { smoothChains = enabled; }
 
     public AnimComposer(AnimationState boundState) {
         AnimComposer composer = this;
@@ -21,6 +24,14 @@ public class AnimComposer {
                     if (entry.getAnimation().getName().equals(composer.playing.animClip().fullName)) {
                         AnimData completed = composer.playing;
                         if (!completed.isLoop()) {
+                            if (smoothChains && completed.animNext() != null) {
+                                // Keeps the outgoing pose available for Spine's configured mixing.
+                                composer.playing = null;
+                                composer.offer(completed.animNext());
+                                if (completed.name().equals(completed.animNext().name()))
+                                    state.getCurrent(coreTrackId).setMixDuration(0);
+                                return;
+                            }
                             composer.reset();
                             if (completed.animNext() != null) {
                                 composer.offer(completed.animNext());
