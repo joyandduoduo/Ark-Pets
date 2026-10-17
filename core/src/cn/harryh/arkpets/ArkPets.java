@@ -162,7 +162,7 @@ public class ArkPets extends InputApplicationAdaptor {
         if (companionSpeaking && tray.keepAnim == null) newAnim = behavior.defaultAnim();
 
         if (!isMouseDragging()) { // If no dragging:
-            plane.updatePosition(Gdx.graphics.getDeltaTime());
+            if (companion == null || !companion.holdsPosition()) plane.updatePosition(Gdx.graphics.getDeltaTime());
             if (cha.getPlaying().mobility() != 0) {
                 int mobility = cha.getPlaying().mobility();
                 if (tray.keepAnim == null && willReachBorder(mobility)) {
@@ -255,6 +255,7 @@ public class ArkPets extends InputApplicationAdaptor {
         replacement.position.reset(replacement.position.end().x, replacement.position.end().y,
                 Math.signum(previous.position.end().z));
         cha = replacement;
+        offsetY = 0;
         behavior = nextBehavior;
         config = nextConfig;
         tray.keepAnim = null;
@@ -352,7 +353,7 @@ public class ArkPets extends InputApplicationAdaptor {
 
     private void changeAnimation(AnimData animData) {
         if (cha.setAnimation(animData))
-            offsetY = (int) (animData.animClip().type.offsetY * config.display_scale);
+            offsetY = cha.hasSmoothCompanionChains() ? 0 : (int) (animData.animClip().type.offsetY * config.display_scale);
     }
 
     private void changeMobilitySign(int sign) {

@@ -21,6 +21,7 @@ public final class CompanionShowcase {
         AnimClip standing = names.get("idle");
         if (!usable(standing) || !usable(names.get("attack"))) return null;
         List<AnimClip> sequence = new ArrayList<>();
+        if (usable(names.get("start"))) sequence.add(names.get("start"));
         hold(sequence, standing, between(5, 8));
         sequence.add(names.get("attack"));
         hold(sequence, standing, between(3, 5));
@@ -35,9 +36,14 @@ public final class CompanionShowcase {
             hold(sequence, standing, between(5, 8));
         } else if (skill == 2 && usable(names.get("skill_2"))) {
             sequence.add(names.get("skill_2"));
-            hold(sequence, standing, between(16, 22));
+            hold(sequence, standing, between(6, 9));
+            sequence.add(names.get("skill_2"));
+            hold(sequence, standing, between(5, 8));
         } else return null;
-        AnimData result = idle;
+        // Ling's defeat clip is an explicitly requested theatrical exit. Back models omit it.
+        if (usable(names.get("die"))) sequence.add(names.get("die"));
+        // Holds the final pose until the runtime fades back to the chosen model.
+        AnimData result = null;
         for (int i = sequence.size() - 1; i >= 0; i--)
             result = new AnimData(sequence.get(i), result, false, true, 0);
         return new Plan(result, skill, CompanionAnimations.duration(result));

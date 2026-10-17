@@ -24,6 +24,7 @@ public class AnimComposer {
                     if (entry.getAnimation().getName().equals(composer.playing.animClip().fullName)) {
                         AnimData completed = composer.playing;
                         if (!completed.isLoop()) {
+                            if (smoothChains && completed.animNext() == null) return;
                             if (smoothChains && completed.animNext() != null) {
                                 // Keeps the outgoing pose available for Spine's configured mixing.
                                 composer.playing = null;
@@ -57,6 +58,13 @@ public class AnimComposer {
 
     public AnimData getPlaying() {
         return playing;
+    }
+
+    /** Detects a finished finite chain while preserving its final pose. */
+    public boolean isFinished() {
+        AnimationState.TrackEntry entry = state.getCurrent(coreTrackId);
+        return playing != null && !playing.isLoop() && playing.animNext() == null
+                && entry != null && entry.isComplete();
     }
 
     public void reset() {

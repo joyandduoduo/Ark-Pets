@@ -22,6 +22,11 @@ public final class LingShowcaseResourceCheck extends ApplicationAdapter {
     private static Throwable failure;
 
     public static void main(String[] args) throws Exception {
+        if (args[0].equals("--pet")) {
+            for (int i = 0; i < Const.serverPorts.length; i++) Const.serverPorts[i] = 21786 + i;
+            EmbeddedLauncher.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         catalog = new CompanionCatalog(Path.of(args[0])); report = Path.of(args[1]); Files.createDirectories(report);
         cn.harryh.arkpets.utils.Logger.initialize(report.resolve("resource-log").toString(), 2);
         Lwjgl3ApplicationConfiguration cfg = new Lwjgl3ApplicationConfiguration();
@@ -55,22 +60,26 @@ public final class LingShowcaseResourceCheck extends ApplicationAdapter {
                         for (int skill : List.of(3, 2)) {
                             CompanionShowcase.Plan plan = CompanionShowcase.ling(cha.animList, skill, behavior.defaultAnim());
                             require(plan != null && plan.seconds() >= 25 && plan.seconds() <= 80, "Bounded presentation duration");
-                            int attacks = 0, skillAttacks = 0, idleCycles = 0;
+                            int attacks = 0, skillAttacks = 0, idleCycles = 0, skill2 = 0, exits = 0;
                             float skillIdleSeconds = 0;
-                            for (AnimData part = plan.animation(); !part.isLoop(); part = part.animNext()) {
+                            require(plan.animation().name().equals("Start"), "Starts with native entry");
+                            for (AnimData part = plan.animation(); part != null; part = part.animNext()) {
                                 String name = part.name().toLowerCase(Locale.ROOT);
-                                require(!name.contains("die") && part.isStrict() && part.mobility() == 0, "Safe finite chain");
+                                require(!part.isLoop() && part.isStrict() && part.mobility() == 0, "Finite stationary chain");
+                                if (name.equals("die")) { exits++; require(part.animNext() == null, "Exit is terminal"); }
+                                if (name.equals("skill_02")) skill2++;
                                 if (name.equals("attack")) attacks++;
                                 if (name.equals("skill_03_loop")) skillAttacks++;
                                 if (name.equals("skill_03_idle")) { idleCycles++; skillIdleSeconds += part.animClip().duration; }
                             }
                             require(attacks == 1, "Exactly one normal attack");
                             if (skill == 3) require(skillAttacks == 1 && skillIdleSeconds >= 20, "Sustained skill idle with one skill attack");
-                            else require(skillAttacks == 0 && idleCycles == 0, "Skill 2 uses ordinary idle");
+                            else require(skillAttacks == 0 && idleCycles == 0 && skill2 == 2, "Skill 2 plays twice with ordinary idle");
+                            require(exits == (mode.equals("battle-front") ? 1 : 0), "Uses the available exit only");
                             cha.setSmoothCompanionChains(true); cha.resetAnimation(plan.animation());
                             int realMixes = 0;
                             String previous = cha.getPlaying().name();
-                            boolean captured = false;
+                            Set<String> captured = new HashSet<>();
                             for (int tick = 0; tick < (plan.seconds() + 1) * 60; tick++) {
                                 state.update(1 / 60f); state.apply(skeleton); skeleton.updateWorldTransform();
                                 String current = cha.getPlaying().name();
@@ -80,19 +89,25 @@ public final class LingShowcaseResourceCheck extends ApplicationAdapter {
                                     realMixes++;
                                 }
                                 previous = current;
-                                if (!captured && skill == 3 && current.equals("Skill_03_Idle") && state.getCurrent(0).getTrackTime() > .6f) {
+                                if (skin.getString("id").equals("skin-1") && mode.equals("battle-front")
+                                        && Set.of("Start", "Skill_02", "Skill_03_Begin", "Skill_03_Idle", "Skill_03_Loop", "Skill_03_End", "Die").contains(current)
+                                        && !captured.contains(current) && state.getCurrent(0).getTrackTime() > state.getCurrent(0).getAnimation().getDuration() * .55f) {
                                     cha.position.reset(cha.camera.getWidth() / 2f, 0, 1); cha.position.setToEnd();
                                     cha.render(); cha.render(); cha.camera.getFBO().begin();
                                     var pixels = cn.harryh.arkpets.render.PixmapWrapper.fromCamera(cha.camera); cha.camera.getFBO().end();
-                                    pixels.savePixmap(new FileHandle(report.resolve(skin.getString("id") + "-" + mode + "-skill-idle.png").toFile()), true);
-                                    pixels.dispose(); captured = true;
+                                    pixels.savePixmap(new FileHandle(report.resolve(skin.getString("id") + "-" + mode + "-" + current + ".png").toFile()), true);
+                                    pixels.dispose(); captured.add(current);
                                 }
                             }
-                            require(cha.getPlaying().isLoop() && cha.getPlaying().name().equals(behavior.defaultAnim().name()), "Returns to ordinary idle");
+                            require(cha.isCompanionChainFinished(), "Final pose held until runtime fade");
+                            require(cha.getPlaying().name().equals(exits == 1 ? "Die" : "Idle"), "No idle flash after exit");
                             require(realMixes >= 3, "Real clip-to-clip pose mixing");
                             JSONObject result = new JSONObject(); result.put("skin", skin.getString("name")); result.put("mode", mode);
                             result.put("skill", skill); result.put("seconds", plan.seconds()); result.put("skillIdleSeconds", skillIdleSeconds);
                             result.put("normalAttacks", attacks); result.put("skillAttacks", skillAttacks); result.put("poseMixes", realMixes);
+                            result.put("skill2Casts", skill2); result.put("exits", exits); result.put("finalPoseHeld", true);
+                            result.put("animations", Arrays.stream(skeleton.getData().getAnimations().toArray(Animation.class)).map(Animation::getName).toList());
+                            result.put("events", Arrays.stream(skeleton.getData().getEvents().toArray(EventData.class)).map(EventData::getName).toList());
                             checks.add(result);
                         }
                     } finally { cha.dispose(); }

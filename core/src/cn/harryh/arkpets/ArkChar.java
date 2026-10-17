@@ -46,6 +46,7 @@ public class ArkChar {
     private SkeletonLoader skeletonLoader;
 
     private final AnimComposer composer;
+    private boolean smoothCompanionChains;
     private final AnimationState animationState;
     protected final AnimClipGroup animList;
     protected final HashMap<AnimStage, Insert> stageInsertMap;
@@ -108,7 +109,7 @@ public class ArkChar {
             protected void onApply(AnimData playing) {
                 Logger.debug("Animation", "Apply " + playing);
                 // Sync skeleton position data
-                offsetY.reset(playing.animClip().type.offsetY * scale);
+                offsetY.reset(smoothCompanionChains ? 0 : playing.animClip().type.offsetY * scale);
                 position.reset(position.end().x, position.end().y, playing.mobility() != 0 ? playing.mobility() : position.end().z);
             }
         };
@@ -158,7 +159,15 @@ public class ArkChar {
     }
 
     /** Enables pose-preserving completion transitions for the companion trial. */
-    public void setSmoothCompanionChains(boolean enabled) { composer.setSmoothChains(enabled); }
+    public void setSmoothCompanionChains(boolean enabled) {
+        smoothCompanionChains = enabled;
+        composer.setSmoothChains(enabled);
+        if (enabled) { offsetY.reset(0f); offsetY.setToEnd(); }
+    }
+
+    public boolean hasSmoothCompanionChains() { return smoothCompanionChains; }
+
+    public boolean isCompanionChainFinished() { return composer.isFinished(); }
 
     /** Releases the resources of an old wardrobe on the render thread. */
     public void dispose() {

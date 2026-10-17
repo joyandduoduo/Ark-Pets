@@ -17,6 +17,7 @@
         <JFXComboBox fx:id="wardrobeMin" prefWidth="70"/><Label text="至" style="-fx-pref-width: 20;"/><JFXComboBox fx:id="wardrobeMax" prefWidth="70"/>
     </HBox>
     <HBox><JFXButton fx:id="tryActivity" text="来点动作" styleClass="btn-secondary"/><JFXButton fx:id="previewBattle" text="展示战斗" styleClass="btn-secondary" visible="false" managed="false"/></HBox>
+    <Label fx:id="wardrobeDetails" styleClass="config-help-text" maxWidth="405"/>
     <Label fx:id="activityHelp" text="穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。" styleClass="config-help-text" maxWidth="405"/>
     <Separator/>
     <HBox><JFXCheckBox fx:id="voiceEnabled" text="自动轮播普通话语音"/></HBox>
@@ -42,7 +43,7 @@
     <Label fx:id="companionStatus" styleClass="config-help-text" maxWidth="405"/>
     <Separator/>
     <Label styleClass="config-group-title" text="战斗动作"/>
-    <Label text="在模型页切到战斗正面或背面后可用；播放结束返回待机。" styleClass="config-help-text" maxWidth="405"/>
+    <Label fx:id="battleHelp" text="在模型页切到战斗正面或背面后可用；播放结束返回待机。" styleClass="config-help-text" maxWidth="405"/>
     <HBox spacing="8">
         <JFXButton fx:id="attack" text="攻击" styleClass="btn-secondary"/>
         <JFXButton fx:id="skill1" text="技能 1" styleClass="btn-secondary"/>

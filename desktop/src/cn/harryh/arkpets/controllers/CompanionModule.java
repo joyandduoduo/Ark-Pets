@@ -28,7 +28,7 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
     @FXML private ComboBox<Integer> activityMin, activityMax, wardrobeMin, wardrobeMax;
     @FXML private ComboBox<String> bubbleTheme;
     @FXML private Button changeWardrobe, tryActivity, previewBattle, previewBubble, chooseVoices;
-    @FXML private Label activityHelp;
+    @FXML private Label activityHelp, wardrobeDetails, battleHelp;
     private CompanionSupport support;
     private boolean updating;
 
@@ -75,7 +75,9 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         List<Button> gestures = List.of(attack, skill1, skill2, skill3);
         for (int i = 0; i < gestures.size(); i++) {
             String command = i == 0 ? "attack" : "skill" + i;
-            gestures.get(i).setOnAction(e -> support.command(command));
+            gestures.get(i).setOnAction(e -> support.command(
+                    CompanionShowcase.supports(support.selected.getString("id")) && (command.equals("skill2") || command.equals("skill3"))
+                            ? "showcase" + command.substring(5) : command));
         }
         support.onSelection = this::select;
         support.onStatus = this::refresh;
@@ -152,9 +154,16 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         previewBattle.setVisible(showcase); previewBattle.setManaged(showcase);
         previewBattle.setDisable(!running || support.state().getBooleanValue("battleShowcase"));
         activityHelp.setText(showcase
-                ? "令：战斗形态与技能待机多停留一会儿，普攻一次；结束后回到所选模型。点击角色或切换模型可提前结束。"
+                ? "令：入场 → 战斗待机 → 普攻一次 → 二、三技能交替展示 → 退场；正面含 Die。二技能间隔施放两次，三技能多停留。点击角色可提前结束。"
                 : "穿插互动、坐下与短战斗动作；结束后回日常。拖拽、手动模式和说话时会让路。");
         JSONObject state = support.state();
+        wardrobeDetails.setText(!support.controls.getBooleanValue("autoWardrobe") ? "自动换装已关闭"
+                : !running ? "启动后自动换装；倒计时会在重启后继续。"
+                : state.getBooleanValue("wardrobePending") ? "已到换装时间，当前动作或语音结束后换装。"
+                : state.getLongValue("nextWardrobeAt") > 0 ? "下次换装约 " + DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(state.getLongValue("nextWardrobeAt")))
+                : "正在读取换装时间…");
+        battleHelp.setText(showcase ? "技能 2 / 3 可直接预览完整展示。当前素材无独立技能 1 动作；正面含入场和 Die。"
+                : "在模型页切到战斗正面或背面后可用；播放结束返回待机。");
         int count = support.selected.getJSONArray("voices").size();
         int enabled = CompanionVoices.enabled(support.selected, support.controls).size();
         playVoice.setDisable(!running || enabled == 0);
@@ -167,6 +176,11 @@ public final class CompanionModule implements Controller<ArkHomeFX> {
         String requested = support.controls.getString("skin") + "/" + support.controls.getString("mode");
         if (running && requested.equals(state.getString("variant")) && !"building".equals(support.controls.getString("mode")) && state.getJSONArray("gestures") != null)
             for (int i : state.getJSONArray("gestures").toJavaList(Integer.class)) if (i >= 0 && i < buttons.size()) buttons.get(i).setDisable(false);
+        if (showcase && running) {
+            boolean busy = state.getBooleanValue("battleShowcase") || state.getBooleanValue("transitioning")
+                    || state.getBooleanValue("voicePlaying") || (state.getString("activity") != null && !state.getString("activity").isEmpty());
+            skill2.setDisable(busy); skill3.setDisable(busy);
+        }
         companionStatus.setText(support.statusText());
         if (count == 0) voiceDetails.setText("来源中未提供这位角色的普通话语音。");
         else {

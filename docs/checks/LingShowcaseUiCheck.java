@@ -39,6 +39,11 @@ public final class LingShowcaseUiCheck {
                     if (preview == null || !preview.isVisible() || !preview.isManaged()) throw new AssertionError("Ling preview missing");
                     Label help = (Label) stage.getScene().lookup("#activityHelp");
                     if (!help.getText().contains("普攻一次")) throw new AssertionError("Ling help missing");
+                    if (!help.getText().contains("Die")) throw new AssertionError("Ling exit explanation missing");
+                    Label wardrobe = (Label) stage.getScene().lookup("#wardrobeDetails");
+                    Label battle = (Label) stage.getScene().lookup("#battleHelp");
+                    if (wardrobe == null || wardrobe.getText().isEmpty() || battle == null || !battle.getText().contains("技能 1"))
+                        throw new AssertionError("Wardrobe status or skill availability explanation missing");
                     app.companions.select("char_2024_chyue");
                     if (preview.isVisible() || preview.isManaged()) throw new AssertionError("Trial leaked to another character");
                     app.companions.select("char_2023_ling");
@@ -49,7 +54,7 @@ public final class LingShowcaseUiCheck {
                     for (int y = 0; y < png.getHeight(); y++)
                         for (int x = 0; x < png.getWidth(); x++) png.setRGB(x, y, image.getPixelReader().getArgb(x, y));
                     ImageIO.write(png, "png", Path.of(getParameters().getRaw().get(1)).toFile());
-                    Files.writeString(Path.of("ui-check.txt"), "Original modules present; Ling preview visible; other characters unchanged; native scene captured.");
+                    Files.writeString(Path.of("ui-check.txt"), "Original modules present; Ling preview and exit explanation visible; wardrobe schedule and skill availability visible; other characters unchanged; native scene captured.");
                 } catch (Throwable ex) { failure = ex; }
                 finally { app.config.launcher_solid_exit = false; app.stop(); stage.close(); Platform.exit(); }
             }); pause.play();

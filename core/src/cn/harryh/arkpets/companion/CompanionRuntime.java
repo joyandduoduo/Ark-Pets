@@ -25,7 +25,8 @@ public final class CompanionRuntime {
     private final ArkPets pet;
     private final CompanionCatalog catalog;
     private final JSONObject character;
-    private final Path controlsFile, statusFile;
+    private final Path controlsFile, statusFile, scheduleFile;
+    private JSONObject savedSchedule = new JSONObject();
     private final CompanionSpeechBubble bubble = new CompanionSpeechBubble();
     private final List<JSONObject> voiceBag = new ArrayList<>();
     private final List<String> wardrobeBag = new ArrayList<>();
@@ -46,6 +47,7 @@ public final class CompanionRuntime {
     private boolean bubblePreview;
     private boolean showcaseActive;
     private int showcaseCount, statusWriteRetries;
+    private int nextShowcaseSkill = 2;
     private float activitySeconds;
     private long statusBlockedSince;
     private ModelTransition modelTransition;
@@ -63,6 +65,15 @@ public final class CompanionRuntime {
         character = catalog.character(id);
         controlsFile = catalog.controls(id);
         statusFile = controlsFile.resolveSibling(id + ".status.json");
+        scheduleFile = controlsFile.resolveSibling(id + ".schedule.json");
+        try {
+            if (Files.exists(scheduleFile)) savedSchedule = JSONObject.parseObject(Files.readString(scheduleFile));
+            else if (Files.exists(statusFile)) {
+                JSONObject previous = JSONObject.parseObject(Files.readString(statusFile));
+                if (id.equals(previous.getString("character")) && catalog.directory.toString().equals(previous.getString("catalogDirectory")))
+                    savedSchedule.put("nextWardrobeAt", previous.getLongValue("nextWardrobeAt"));
+            }
+        } catch (Exception error) { Logger.warn("Companion", "Could not restore wardrobe schedule: " + error); }
         poll();
     }
 
@@ -89,7 +100,7 @@ public final class CompanionRuntime {
             if (modelTransition != null) { updateTransition(now); return; }
             if (!activity.isEmpty() && now - activityStarted >= 350) {
                 AnimData playing = pet.cha.getPlaying();
-                if (playing == null || !playing.isStrict() || now >= activityDeadline) {
+                if (playing == null || !playing.isStrict() || (showcaseActive && pet.cha.isCompanionChainFinished()) || now >= activityDeadline) {
                     if (showcaseActive) {
                         modelTransition = new ModelTransition(() -> restoreActivity(System.currentTimeMillis()));
                         return;
@@ -129,6 +140,7 @@ public final class CompanionRuntime {
                 || controls.getIntValue("voiceMinSeconds") != next.getIntValue("voiceMinSeconds")
                 || controls.getIntValue("voiceMaxSeconds") != next.getIntValue("voiceMaxSeconds");
         boolean actionsChanged = changed(next, "autoActions", "activityMinSeconds", "activityMaxSeconds");
+        boolean firstPoll = controls == null;
         boolean wardrobeChanged = changed(next, "autoWardrobe", "wardrobeMinSeconds", "wardrobeMaxSeconds");
         boolean playlistChanged = changed(next, "selectedVoiceIds");
         controls = next;
@@ -144,7 +156,7 @@ public final class CompanionRuntime {
         if (!controls.getBooleanValue("bubbleEnabled")) bubble.hide();
         bubble.theme(controls.getString("bubbleTheme"));
         if (actionsChanged) nextActivityAt = after(System.currentTimeMillis(), "activity", 45, 120);
-        if (wardrobeChanged) nextWardrobeAt = after(System.currentTimeMillis(), "wardrobe", 1800, 3600);
+        if (wardrobeChanged) scheduleWardrobe(System.currentTimeMillis(), firstPoll);
         if ((!controls.getBooleanValue("autoActions") || (showcaseActive && !controls.getBooleanValue("battleActions")))
                 && !activity.isEmpty()) finishActivity(System.currentTimeMillis());
         String id = controls.getString("commandId");
@@ -154,10 +166,12 @@ public final class CompanionRuntime {
             switch (action) {
                 case "voice" -> { if (!activity.isEmpty()) finishActivity(System.currentTimeMillis()); playVoice(); }
                 case "activity" -> { if (voice == null && System.currentTimeMillis() >= readUntil && pet.canCompanionAct()) startActivity(System.currentTimeMillis()); }
-                case "showcase" -> {
+                case "showcase", "showcase2", "showcase3" -> {
                     if (CompanionShowcase.supports(character.getString("id")) && activity.isEmpty()
-                            && voice == null && System.currentTimeMillis() >= readUntil && pet.canCompanionAct())
+                            && voice == null && System.currentTimeMillis() >= readUntil && pet.canCompanionAct()) {
+                        if (!action.equals("showcase")) nextShowcaseSkill = Integer.parseInt(action.substring(8));
                         startActivity(System.currentTimeMillis(), true);
+                    }
                 }
                 case "wardrobe" -> wardrobeRequested = true;
                 case "previewBubble" -> previewBubble();
@@ -279,7 +293,7 @@ public final class CompanionRuntime {
 
     private void startShowcase(String targetSkin, String targetMode) {
         applyVariant(targetSkin, targetMode);
-        int skill = showcaseCount % 3 == 1 ? 2 : 3;
+        int skill = nextShowcaseSkill;
         CompanionShowcase.Plan plan = pet.companionShowcase(skill);
         if (plan == null) { restoreActivity(System.currentTimeMillis()); return; }
         pet.cha.setSmoothCompanionChains(true);
@@ -290,6 +304,7 @@ public final class CompanionRuntime {
         activitySeconds = plan.seconds();
         activityDeadline = activityStarted + Math.round((activitySeconds + 2) * 1000);
         showcaseCount++; activityCount++;
+        nextShowcaseSkill = skill == 2 ? 3 : 2;
         recentActivities.addLast(activity);
         while (recentActivities.size() > 12) recentActivities.removeFirst();
     }
@@ -320,6 +335,9 @@ public final class CompanionRuntime {
         if (showcaseActive || modelTransition != null) finishActivity(System.currentTimeMillis());
     }
 
+    /** Keeps a staged performance anchored while desktop support windows change. */
+    public boolean holdsPosition() { return showcaseActive || modelTransition != null; }
+
     private void changeWardrobe(long now) throws IOException {
         wardrobeRequested = false;
         List<JSONObject> all = character.getJSONArray("skins").toJavaList(JSONObject.class);
@@ -339,8 +357,23 @@ public final class CompanionRuntime {
             modified = Files.getLastModifiedTime(controlsFile).toMillis();
             wardrobeCount++;
         }
-        nextWardrobeAt = after(now, "wardrobe", 1800, 3600);
+        scheduleWardrobe(now, false);
         writeStatus();
+    }
+
+    /** Resumes a wardrobe deadline across restarts, resetting only when its settings change. */
+    private void scheduleWardrobe(long now, boolean resume) throws IOException {
+        boolean same = !savedSchedule.containsKey("autoWardrobe")
+                || List.of("autoWardrobe", "wardrobeMinSeconds", "wardrobeMaxSeconds").stream()
+                .allMatch(key -> Objects.equals(savedSchedule.get(key), controls.get(key)));
+        long saved = savedSchedule.getLongValue("nextWardrobeAt");
+        long maxFuture = now + Math.max(1, controls.getIntValue("wardrobeMaxSeconds")) * 1000L;
+        nextWardrobeAt = resume && same && saved > 0 && saved <= maxFuture
+                ? saved : after(now, "wardrobe", 1800, 3600);
+        savedSchedule.put("nextWardrobeAt", nextWardrobeAt);
+        for (String key : List.of("autoWardrobe", "wardrobeMinSeconds", "wardrobeMaxSeconds"))
+            savedSchedule.put(key, controls.get(key));
+        atomic(scheduleFile, savedSchedule);
     }
 
     private float volume() { return Math.max(0, Math.min(1, controls.getFloatValue("volume"))); }
@@ -423,6 +456,8 @@ public final class CompanionRuntime {
         status.put("nextVoiceAt", nextVoiceAt); status.put("nextActivityAt", nextActivityAt); status.put("nextWardrobeAt", nextWardrobeAt);
         status.put("activity", activity); status.put("activityCount", activityCount); status.put("wardrobeCount", wardrobeCount);
         status.put("battleShowcase", showcaseActive); status.put("showcaseCount", showcaseCount);
+        status.put("nextShowcaseSkill", nextShowcaseSkill);
+        status.put("wardrobePending", wardrobeRequested || (controls.getBooleanValue("autoWardrobe") && System.currentTimeMillis() >= nextWardrobeAt));
         status.put("activitySeconds", activitySeconds); status.put("transitioning", modelTransition != null);
         status.put("transitionOpacity", pet.companionOpacity());
         status.put("petCenterX", pet.companionCenterX()); status.put("petFacing", pet.companionFacing());

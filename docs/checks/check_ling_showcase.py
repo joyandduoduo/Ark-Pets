@@ -12,6 +12,8 @@ parser.add_argument('--java', type=Path, required=True)
 parser.add_argument('--jar', type=Path, required=True)
 parser.add_argument('--fixture', type=Path, required=True)
 args = parser.parse_args()
+args.java = args.java.resolve()
+args.jar = args.jar.resolve()
 root = args.fixture.resolve()
 runtime = root / 'runtime'
 runtime.mkdir(exist_ok=True)
@@ -78,38 +80,41 @@ def presentation(skill):
         time.sleep(.08)
     else:
         raise AssertionError('Presentation did not finish')
+    trace.extend(samples)
     names = []
     for s in samples:
         if not names or names[-1] != s['playing']:
             names.append(s['playing'])
         assert abs(s['petCenterX'] - start['petCenterX']) < 1, 'Horizontal anchor jumped'
-        assert abs(s['petY'] - start['petY']) < 1, 'Floor anchor jumped'
+        assert abs(s['petY'] - start['petY']) < 1, f'Floor anchor jumped: {start["petY"]} -> {s["petY"]}, {s["playing"]}'
         assert s['petFacing'] == start['petFacing'], 'Facing changed'
-    assert names.count('Attack') == 1, names
+    assert names[0] == 'Start' and names.count('Attack') == 1 and names.count('Die') == 1, names
+    assert not any(s['playing'] == 'Idle' and s['battleShowcase'] for s in samples[next(i for i, s in enumerate(samples) if s['playing'] == 'Die'):]), 'Idle flash after Die'
     if skill == 3:
         idle_samples = [s for s in samples if s['playing'] == 'Skill_03_Idle']
         assert len(idle_samples) >= 55, f'Skill idle too short: {len(idle_samples)} samples'
         assert names.count('Skill_03_Loop') == 1 and names.count('Skill_03_End') == 1, names
     else:
-        assert names.count('Skill_02') == 1 and 'Skill_03_Idle' not in names, names
+        assert names.count('Skill_02') == 2 and 'Skill_03_Idle' not in names, names
     final = samples[-1]
     assert final['variant'] == 'skin-1/building' and final['transitionOpacity'] == 1
     assert 88_000 <= final['nextActivityAt'] - final['updatedAt'] <= 121_000, final
     checks.append(dict(skill=skill, seconds=start['activitySeconds'], clips=names,
                        samples=len(samples), returned=True, anchorPreserved=True))
-    trace.extend(samples)
 
+def launch():
+    with (root / 'pet.log').open('a', encoding='utf-8') as log:
+        return subprocess.Popen([str(args.java), '-Dfile.encoding=UTF-8',
+            f'-Darkpets.companion.catalog={root / "catalog.json"}', '-Darkpets.companion.character=char_2023_ling',
+            '-cp', str(root.parent / 'classes') + ';' + str(args.jar), 'cn.harryh.arkpets.LingShowcaseResourceCheck', '--pet', '--config', str(config_path)],
+            cwd=root, stdout=log, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
 try:
     save('none')
-    with (root / 'pet.log').open('w', encoding='utf-8') as log:
-        pet = subprocess.Popen([str(args.java), '-Dfile.encoding=UTF-8',
-            f'-Darkpets.companion.catalog={root / "catalog.json"}', '-Darkpets.companion.character=char_2023_ling',
-            '-cp', str(args.jar), 'cn.harryh.arkpets.EmbeddedLauncher', '--config', str(config_path)],
-            cwd=root, stdout=log, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+    pet = launch()
     until(lambda s: s.get('playing') == 'Idle' or s.get('playing') == 'Relax', 30)
     time.sleep(2)
-    presentation(3)
     presentation(2)
+    presentation(3)
 
     baseline = state()
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -124,7 +129,7 @@ try:
     assert recovered['nextActivityAt'] == baseline['nextActivityAt'], 'Status contention reset activity timer'
     checks.append(dict(statusContentionRecovered=True, timerPreserved=True))
 
-    save('showcase')
+    save('showcase3')
     until(lambda s: s['battleShowcase'] and s['playing'] == 'Skill_03_Idle', 35)
     prefs['skin'] = 'skin-2'; save('none')
     interrupted = until(lambda s: not s['battleShowcase'] and not s['transitioning'] and s['variant'] == 'skin-2/building')
@@ -135,6 +140,27 @@ try:
     prefs['battleActions'] = False; save('none')
     until(lambda s: not s['battleShowcase'] and s['variant'] == 'skin-2/building' and s['transitionOpacity'] == 1)
     checks.append(dict(battleToggleInterrupts=True))
+
+    prefs.update(autoWardrobe=True, wardrobeMinSeconds=15, wardrobeMaxSeconds=15, autoActions=False)
+    save('none')
+    scheduled = until(lambda s: s['nextWardrobeAt'] - s['updatedAt'] < 16_000)
+    deadline = scheduled['nextWardrobeAt']
+    save('exit'); pet.wait(timeout=8)
+    save('none'); pet = launch()
+    resumed = until(lambda s: s.get('nextWardrobeAt') == deadline, 10)
+    changed = until(lambda s: s['wardrobeCount'] >= 1, 20)
+    assert changed['variant'] != resumed['variant'], 'Automatic wardrobe failed after restart'
+    checks.append(dict(wardrobeDeadlineSurvivesRestart=True, automaticWardrobeChanged=True))
+
+    prefs.update(json.loads(control.read_text(encoding='utf-8')))
+    prefs.update(autoActions=True, battleActions=True, wardrobeMinSeconds=8, wardrobeMaxSeconds=8)
+    save('showcase2')
+    pending = until(lambda s: s['battleShowcase'] and s['wardrobePending'], 20)
+    waiting_skin = pending['variant'].split('/')[0]
+    previous_count = pending['wardrobeCount']
+    changed = until(lambda s: not s['battleShowcase'] and s['wardrobeCount'] > previous_count, 65)
+    assert changed['variant'].split('/')[0] != waiting_skin
+    checks.append(dict(wardrobeWaitsForShowcase=True, overdueWardrobeRunsBeforeNextActivity=True))
     print(json.dumps(dict(passed=checks), ensure_ascii=False), flush=True)
 finally:
     (root / 'showcase-trace.json').write_text(json.dumps(trace, ensure_ascii=False), encoding='utf-8')
